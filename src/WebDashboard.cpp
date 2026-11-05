@@ -1,0 +1,37 @@
+#include "WebDashboard.h"
+
+const char kWebDashboard[] PROGMEM = R"HTML(
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b10"><title>Downhill Dispatcher</title>
+<style>
+:root{color-scheme:dark;--bg:#080b10;--panel:#111720;--line:#273141;--text:#f4f7fb;--muted:#93a1b5;--green:#42e29a;--red:#ff5364;--blue:#5aa7ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#172233 0,var(--bg) 42%);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);min-height:100vh;padding:calc(20px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));touch-action:manipulation}
+main{max-width:680px;margin:auto}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}.eyebrow{color:var(--muted);font-size:.75rem;letter-spacing:.13em;text-transform:uppercase}h1{font-size:1.65rem;margin:.25rem 0}.link{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:.85rem}.dot{width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 14px var(--red)}.dot.on{background:var(--green);box-shadow:0 0 14px var(--green)}
+.card{background:rgba(17,23,32,.94);border:1px solid var(--line);border-radius:22px;padding:20px;margin-top:16px;box-shadow:0 18px 50px #0006}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metric{background:#0b1017;border:1px solid #202938;border-radius:16px;padding:14px 10px;text-align:center}.metric b{display:block;font-size:1.4rem;margin-top:4px}.metric span{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.row{display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px}.row output{font-weight:700;font-size:1.15rem}input[type=range]{width:100%;accent-color:var(--blue);height:36px}.directions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}button{font:inherit;color:var(--text);border:1px solid var(--line);background:#182130;border-radius:16px;min-height:54px;font-weight:750;letter-spacing:.02em;-webkit-tap-highlight-color:transparent}.dir.active{border-color:var(--blue);background:#15375c}.hold{width:100%;min-height:132px;margin-top:16px;border-color:#257653;background:linear-gradient(145deg,#164a36,#0f2c23);font-size:1.35rem;touch-action:none;user-select:none;-webkit-user-select:none}.hold.pressed{background:#1d7954;transform:scale(.99)}.stop{width:100%;margin-top:12px;border-color:#963745;background:#5f202b;font-size:1.15rem}.hint,.message{color:var(--muted);text-align:center;font-size:.82rem;line-height:1.45}.message{min-height:1.2em;color:#ffb6be}.footer{margin-top:14px}.disabled{opacity:.5}
+@media(max-width:430px){body{padding-left:12px;padding-right:12px}.card{padding:16px}.metric b{font-size:1.15rem}.metrics{gap:7px}}
+</style></head><body><main>
+<header class="top"><div><div class="eyebrow">Motor A controller</div><h1>Downhill Dispatcher</h1></div><div class="link"><i id="dot" class="dot"></i><span id="connection">Connecting</span></div></header>
+<section class="card"><div class="metrics"><div class="metric"><span>State</span><b id="state">STOPPED</b></div><div class="metric"><span>Direction</span><b id="direction">FWD</b></div><div class="metric"><span>Encoder</span><b><span id="rpm">0.0</span> <small>RPM</small></b></div></div></section>
+<section class="card"><div class="row"><label for="speed">PWM speed</label><output id="speedOut">20%</output></div><input id="speed" type="range" min="0" max="100" value="20">
+<div class="directions"><button id="forward" class="dir">Forward</button><button id="reverse" class="dir">Reverse</button></div>
+<button id="hold" class="hold">PRESS &amp; HOLD TO RUN</button><button id="stop" class="stop">STOP</button><p id="message" class="message"></p><p class="hint">The motor runs only while held. Releasing, changing tabs, or losing the heartbeat stops it within 500 ms.</p></section>
+<p class="hint footer">The physical power switch remains the independent cutoff.</p>
+</main><script>
+const $=id=>document.getElementById(id);const ui={dot:$('dot'),connection:$('connection'),state:$('state'),direction:$('direction'),rpm:$('rpm'),speed:$('speed'),speedOut:$('speedOut'),forward:$('forward'),reverse:$('reverse'),hold:$('hold'),stop:$('stop'),message:$('message')};
+let held=false,heartbeat=null,online=false,busy=false,lastCommandId=0;function nextId(){lastCommandId=Math.max(Date.now(),lastCommandId+1);return lastCommandId}
+async function post(path){const r=await fetch(path,{method:'POST',cache:'no-store'});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function stop(){held=false;ui.hold.classList.remove('pressed');clearInterval(heartbeat);heartbeat=null;try{await post('/api/stop?id='+nextId())}catch(e){} }
+async function beginRun(e){e.preventDefault();if(held||busy||!online)return;held=true;const id=nextId();ui.hold.classList.add('pressed');ui.hold.setPointerCapture?.(e.pointerId);try{await post('/api/run?active=1&id='+id);if(!held){await stop();return}heartbeat=setInterval(()=>post('/api/heartbeat').catch(()=>stop()),150)}catch(err){held=false;ui.hold.classList.remove('pressed');ui.message.textContent='Run rejected: '+err.message}}
+function endRun(e){if(e)e.preventDefault();if(held)stop()}
+ui.hold.addEventListener('pointerdown',beginRun);['pointerup','pointercancel','lostpointercapture'].forEach(x=>ui.hold.addEventListener(x,endRun));
+ui.stop.addEventListener('click',stop);
+ui.speed.addEventListener('input',()=>ui.speedOut.textContent=ui.speed.value+'%');ui.speed.addEventListener('change',async()=>{try{await post('/api/speed?value='+ui.speed.value)}catch(e){ui.message.textContent=e.message}});
+async function direction(value){if(held)await stop();try{await post('/api/direction?value='+value)}catch(e){ui.message.textContent=e.message}}
+ui.forward.addEventListener('click',()=>direction('forward'));ui.reverse.addEventListener('click',()=>direction('reverse'));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});window.addEventListener('pagehide',()=>{navigator.sendBeacon('/api/stop?id='+nextId())});window.addEventListener('offline',stop);
+async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();online=true;ui.dot.classList.add('on');ui.connection.textContent='Connected';ui.state.textContent=s.running?'RUNNING':'STOPPED';ui.state.style.color=s.running?'var(--green)':'';ui.direction.textContent=s.direction==='forward'?'FWD':'REV';ui.rpm.textContent=Number(s.rpm).toFixed(1);if(!held){ui.speed.value=s.speed;ui.speedOut.textContent=s.speed+'%'}ui.forward.classList.toggle('active',s.direction==='forward');ui.reverse.classList.toggle('active',s.direction==='reverse');ui.message.textContent=s.remoteLease?'Remote control active':''}catch(e){if(online)stop();online=false;ui.dot.classList.remove('on');ui.connection.textContent='Disconnected'}}
+setInterval(refresh,250);refresh();
+</script></body></html>
+)HTML";
