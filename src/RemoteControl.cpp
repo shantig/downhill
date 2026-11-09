@@ -129,6 +129,8 @@ void RemoteControl::handleStatus() {
   body += F(",\"source\":\"");
   body += control_.sourceName();
   body += F("\"");
+  body += F(",\"anoConnected\":");
+  body += rotary_.connected() ? F("true") : F("false");
   body += F("}");
   sendJson(200, body);
 }

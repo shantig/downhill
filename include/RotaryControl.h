@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Adafruit_seesaw.h>
 
 #include "ControlCoordinator.h"
 #include "MotorController.h"
@@ -12,23 +13,40 @@ class RotaryControl {
 
   void begin();
   void update();
+  bool connected() const { return connected_; }
 
  private:
-  void updateRotation(uint32_t now);
-  void updateButton(uint32_t now);
-  void applyStep(int8_t direction);
+  class CheckedSeesaw : public Adafruit_seesaw {
+   public:
+    explicit CheckedSeesaw(TwoWire* wire) : Adafruit_seesaw(wire) {}
+    bool readVersionChecked(uint32_t& version);
+    bool readEncoderChecked(int32_t& position);
+    bool readButtonsChecked(uint32_t& states);
+  };
+
+  bool probe() const;
+  bool connect(uint32_t now);
+  void disconnect(const __FlashStringHelper* reason, uint32_t now);
+  void poll(uint32_t now);
+  void updateButton(uint8_t pin, bool pressed, uint32_t now);
+  void handleButtonChange(uint8_t pin, bool pressed, uint32_t now);
+  void updateSelectHold(uint32_t now);
+  void applySteps(int32_t position, int32_t rawDelta);
+  const char* buttonName(uint8_t pin) const;
 
   ControlCoordinator& control_;
   MotorController& motor_;
-  uint8_t rotaryState_ = 0;
-  uint8_t candidateState_ = 0;
-  int8_t quarterSteps_ = 0;
-  uint32_t candidateSinceMs_ = 0;
-  bool rawPressed_ = false;
-  bool pressed_ = false;
+  CheckedSeesaw seesaw_{&Wire};
+  bool connected_ = false;
+  bool rawPressed_[6] = {};
+  bool stablePressed_[6] = {};
+  uint32_t rawChangedMs_[6] = {};
   bool buttonArmed_ = false;
   bool longPressHandled_ = false;
   bool runningWhenPressed_ = false;
-  uint32_t rawChangedMs_ = 0;
   uint32_t pressedSinceMs_ = 0;
+  uint32_t lastPollMs_ = 0;
+  uint32_t lastReconnectAttemptMs_ = 0;
+  uint32_t lastErrorLogMs_ = 0;
+  int32_t encoderPosition_ = 0;
 };

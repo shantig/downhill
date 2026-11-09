@@ -12,6 +12,8 @@ Sources checked on 2026-11-05:
 
 - [Waveshare General Driver product page](https://www.waveshare.com/general-driver-for-robots.htm): ESP32-WROOM-32UE, TB6612FNG motor driver, encoder-capable Motor A/B ports, DC 7–13 V input.
 - [Waveshare official firmware](https://github.com/waveshareteam/ugv_base_general/blob/main/General_Driver/ugv_config.h): Motor A is PWMA GPIO 25, AIN1 GPIO 21, AIN2 GPIO 17, AENCA GPIO 35, AENCB GPIO 34. Waveshare's positive Motor A convention is AIN1 low / AIN2 high.
+- [Waveshare official firmware I2C configuration](https://github.com/waveshareteam/ugv_base_general/blob/main/General_Driver/ugv_config.h): SDA is GPIO 32 and SCL is GPIO 33.
+- [Adafruit ANO Arduino guide](https://learn.adafruit.com/adafruit-ano-rotary-navigation-encoder-to-i2c-stemma-qt-adapter/arduino): seesaw address `0x49`, product ID 5740, SELECT/UP/LEFT/DOWN/RIGHT pins 1/2/3/4/5, and active-low buttons with seesaw pull-ups.
 - [Waveshare motor product page](https://www.waveshare.com/dcgm-n20-12v-en-200rpm.htm): 12 V, 200 rpm no-load, <=0.1 A no-load, <=1.1 A locked-rotor, 150:1 reduction, AB Hall encoder, 7 PPR motor-side / 1050 PPR output-side, encoder accepts 3.3 V or 5 V.
 
 The bench supply's observed 0.033 A idle draw is recorded as a baseline, not a
@@ -19,13 +21,10 @@ pass/fail result. A 1 A current limit is slightly below the motor's published
 maximum locked-rotor current (1.1 A), which is useful protection but may trip
 under startup or auger load.
 
-The repository's complete firmware pin audit assigns only GPIO 17, 21, 25, 34,
-and 35. The proposed GPIO 26, 27, and 32 therefore do not conflict with any
-enabled motor, encoder, Wi-Fi, serial, PWM, or other peripheral in this build.
-They are bidirectional ESP32 GPIOs with internal pull-ups (unlike GPIO 34/35),
-so they are suitable for the mechanical encoder and switch. This is a firmware
-and published Motor A assignment verification; the new wiring has not been
-bench-tested on the board.
+GPIO 32/33 are the General Driver's published I2C bus and do not conflict with
+Motor A or its encoder. Motor B uses GPIO 22/23/26/16/27, so the earlier plan to
+use GPIO 26/27 for a bare encoder has been removed. The ANO adapter wiring and
+disconnect behavior have not yet been bench-tested on the Rev1.2 board.
 
 ## Build and flash
 
@@ -39,8 +38,8 @@ bench-tested on the board.
 PlatformIO uses the generic `esp32dev` definition because the controller is an
 ESP32-WROOM-32UE and Waveshare does not publish a dedicated PlatformIO board
 manifest. The environment is pinned for reproducibility and resolves to
-Arduino-ESP32 2.0.17. It uses only the framework's Arduino, WiFi, and WebServer
-libraries—no third-party dependencies.
+Arduino-ESP32 2.0.17. The official Adafruit seesaw library is pinned to 1.7.9;
+its dependencies are resolved by PlatformIO.
 
 ## Configure the private SoftAP
 
@@ -85,23 +84,26 @@ motor encoder contains pull-ups and the board's matched 6-pin connection is the
 intended interface. If using a custom cable, first verify its pinout against
 Waveshare's encoder connector diagram; do not infer wire function by color.
 
-### Adafruit #377 rotary control
+### Adafruit ANO #5001 with #5740 seesaw adapter
 
 With all power off, wire the separate mechanical encoder as follows:
 
-| Encoder connection | ESP32 connection |
+| ANO adapter connection | General Driver connection |
 | --- | --- |
-| Terminal A | GPIO 26 |
-| Terminal B | GPIO 27 |
-| Terminal C (common) | GND |
-| Either push-button terminal | GPIO 32 |
-| Other push-button terminal | GND |
+| VIN | 3.3 V |
+| GND | Common GND |
+| SDA | GPIO 32 / SDA |
+| SCL | GPIO 33 / SCL |
 
-The firmware configures GPIO 26, 27, and 32 as `INPUT_PULLUP`; do not add an
-external voltage to these inputs. It debounces quadrature transitions, emits
-one 5% change per complete step, and separately debounces the button. Clockwise
-raises the preset and counterclockwise lowers it. If the observed direction is
-reversed during hardware testing, power down and swap A and B.
+The firmware starts `Wire` on GPIO 32/33 at 100 kHz with a 20 ms transaction
+timeout, probes address `0x49`, verifies product ID 5740, enables seesaw input
+pull-ups, and records the initial absolute encoder position without creating an
+event. Clockwise changes speed +5% per reported step and counterclockwise -5%,
+clamped to 0–100%. SELECT controls START/STOP and long-press reset; the other
+four buttons currently log press/release diagnostics only. The configured
+encoder sign follows the expected ANO mounting but must be confirmed during
+Stage A; if reversed, change `kAnoClockwisePositionSign` rather than rewiring
+the I2C bus.
 
 ## Serial commands
 
@@ -156,12 +158,21 @@ and serial START requests are rejected. A button held during startup must be
 released before it can create an event, and a long press cannot become a
 short-press restart on release.
 
+The ANO is polled every 10 ms using checked reads. A failed probe, encoder read,
+or button read marks it disconnected; failed data is never interpreted as a
+press. If PHYSICAL owns a running motor, detection of that failure immediately
+commands STOP. The firmware makes a bounded reconnection attempt once per
+second, validates product ID again, and re-baselines position and buttons;
+serial and web operation remain available while the ANO is absent. Physical
+restart then requires a fresh SELECT press. SELECT held during boot or
+reconnection must first be released and cannot start the motor.
+
 The built-in, loop-serviced `WebServer` keeps request handlers short and does no
 blocking network waits. Useful endpoints are:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/api/status` | GET | Live motor, encoder, source, and remote-lease state |
+| `/api/status` | GET | Live motor, encoder, source, ANO, and lease state |
 | `/api/diagnostics` | GET | Uptime, free heap, AP IP, clients, stop count |
 | `/api/speed?value=20` | POST | Set PWM percentage |
 | `/api/direction?value=forward` | POST | Stop and select direction |
@@ -169,59 +180,47 @@ blocking network waits. Useful endpoints are:
 | `/api/heartbeat` | POST | Maintain an existing run lease |
 | `/api/stop` | POST | Unconditional stop |
 
-## Staged test procedure
+## Staged hardware validation
 
-### 1. Logic-only, motor disconnected
+No physical validation is claimed until these checks are completed and recorded.
 
-- Power by USB only. Confirm startup says stopped.
-- Exercise `STATUS`, direction, speed, and `START`; after three seconds confirm the timeout message. The motor port must remain physically disconnected during this test.
-- Reboot after issuing `START`; confirm it returns stopped.
-- Join the SoftAP and load the dashboard from both the intended phone and Mac.
-  Confirm status and diagnostics update, then press and release hold-to-run.
-  With the motor still disconnected, verify the UI returns to stopped.
-- Hold the run control and disable Wi-Fi, lock the phone, switch browser tabs,
-  and close the page in separate trials. Each trial must show a remote-stop log
-  no later than the 500 ms ESP32 watchdog bound.
-- Reconnect after each trial and confirm the motor remains stopped until a new
-  deliberate hold gesture. Verify the web STOP button also stops a serial
-  `START` command.
-- Confirm the dashboard updates speed, state, RPM, and control source after
-  each physical action without reloading.
-- Rotate one detent each way and confirm exactly one 5% change per detent. Test
-  slow turns and noisy partial turns. If clockwise decreases, power down and
-  swap encoder terminals A and B.
-- Short-press to start and stop. Long-press for at least one second and confirm
-  STOP plus a 60% preset, with no restart on release. Boot while holding the
-  button and confirm releasing it does not start the motor.
-- While web-held and serial-running, use the physical button to STOP. Confirm
-  the web lease ends and neither a heartbeat nor a held button restarts it.
-- Trigger web heartbeat and serial command timeouts separately. Hold the button
-  during each timeout and confirm no restart; release it, then require a new
-  deliberate command. Verify each source transition first produces a safe STOP.
+### Stage A: motor disconnected
 
-### 2. Unloaded motor
+- Power by USB with Motor A disconnected. Confirm startup remains STOPPED.
+- Confirm serial reports address `0x49`, product 5740, and an initial position;
+  confirm the dashboard reports ANO connected.
+- Turn both directions and compare position/delta logs. Confirm one 5% change
+  per reported wheel step and the intended clockwise sign.
+- Press and release SELECT, UP, DOWN, LEFT, and RIGHT; confirm each diagnostic.
+- Confirm SELECT short press toggles and a >=1 second press stops and restores
+  60%, without a short-press action on release.
+- Disconnect SDA, SCL, or the entire cable. Confirm disconnected status and no
+  fabricated button event. Reconnect and confirm product/position revalidation.
+- Reconnect or boot while holding SELECT. Release it and confirm no START; then
+  require a new deliberate press.
+- Exercise serial and web control with the motor disconnected. Confirm the
+  3000 ms serial timeout, 500 ms web heartbeat, ownership transitions, and live
+  dashboard speed/state/source/RPM/ANO updates.
 
-- Start at `SPEED 10`, keep one hand at the bench-supply output control, then enable 12 V.
-- Issue `START`, observe current, sound, direction, and `STATUS`; stop immediately on unexpected motion, heating, noise, encoder behavior, or current-limit operation.
-- Raise duty in small steps. At full duty the unloaded speed should approach, but need not equal, the published 200 rpm. Confirm RPM sign reverses after `STOP`, `REV`, `START`.
-- Record voltage, steady current, PWM percentage, RPM, and test duration. Do not mark the milestone hardware-validated until these observations are captured.
-- Repeat release, Wi-Fi-loss, visibility-loss, heartbeat-timeout, direction,
-  STOP, and reconnection checks at low PWM before increasing speed. Keep the
-  physical power switch immediately accessible.
+### Stage B: motor connected
 
-### 3. 100 g, 4-inch vertical auger
-
-- Disconnect power before fitting the auger. Check shaft coupling, axial/radial support, balance, clearances, containment, and an accessible power cutoff.
-- Keep people clear of the auger. Begin at the lowest duty that starts reliably and use short runs.
-- Record startup and steady current, RPM, supply voltage, vibration, temperature, and whether the 1 A limit activates. Stop on a stall, coupling slip, excessive vibration, heating, or current limiting.
-- Do not treat successful unloaded operation as evidence that the auger is safe or adequately supported.
+- Begin unloaded at low speed with the physical power cutoff accessible. Verify
+  startup STOPPED, SELECT START/STOP, and live +/-5% speed changes.
+- Start from web control, then press SELECT and confirm physical STOP takes
+  ownership and cancels the web lease.
+- Repeat serial timeout and web heartbeat-loss tests at low speed.
+- While PHYSICAL owns a running motor, interrupt the ANO I2C connection and
+  confirm immediate STOP on detected failure. Reconnect and confirm a fresh
+  SELECT press is required before physical restart.
+- Confirm dashboard synchronization throughout. Record voltage, current, RPM,
+  direction, fault-detection latency, and all unexpected behavior.
 
 ## Implementation layout
 
 - `include/BoardConfig.h`: verified GPIOs and tunable constants
 - `src/MotorController.cpp`: bridge/PWM safety behavior
 - `src/ControlCoordinator.cpp`: authoritative ownership and timeout behavior
-- `src/RotaryControl.cpp`: debounced quadrature and push-button input
+- `src/RotaryControl.cpp`: checked seesaw encoder/button input and reconnect safety
 - `src/Encoder.cpp`: signed pulse counting and RPM calculation
 - `src/SerialConsole.cpp`: command parsing and diagnostics
 - `src/RemoteControl.cpp`: SoftAP, HTTP API, and 500 ms remote lease

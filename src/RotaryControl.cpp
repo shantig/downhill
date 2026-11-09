@@ -1,115 +1,254 @@
 #include "RotaryControl.h"
 
+#include <Wire.h>
+
 #include "BoardConfig.h"
 
 namespace {
-// Valid Gray-code transitions. Bounce/reversals cancel rather than producing
-// a complete detent, and an event is emitted only after four quarter-steps.
-constexpr int8_t kTransition[16] = {
-    0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+constexpr uint8_t kFirstButtonPin = BoardConfig::kAnoSelectPin;
+constexpr uint8_t kLastButtonPin = BoardConfig::kAnoRightPin;
+}
+
+bool RotaryControl::CheckedSeesaw::readVersionChecked(uint32_t& version) {
+  uint8_t data[4] = {};
+  if (!read(SEESAW_STATUS_BASE, SEESAW_STATUS_VERSION, data, sizeof(data))) {
+    return false;
+  }
+  version = (static_cast<uint32_t>(data[0]) << 24) |
+            (static_cast<uint32_t>(data[1]) << 16) |
+            (static_cast<uint32_t>(data[2]) << 8) | data[3];
+  return true;
+}
+
+bool RotaryControl::CheckedSeesaw::readEncoderChecked(int32_t& position) {
+  uint8_t data[4] = {};
+  if (!read(SEESAW_ENCODER_BASE, SEESAW_ENCODER_POSITION, data,
+            sizeof(data))) {
+    return false;
+  }
+  const uint32_t raw = (static_cast<uint32_t>(data[0]) << 24) |
+                       (static_cast<uint32_t>(data[1]) << 16) |
+                       (static_cast<uint32_t>(data[2]) << 8) | data[3];
+  position = static_cast<int32_t>(raw);
+  return true;
+}
+
+bool RotaryControl::CheckedSeesaw::readButtonsChecked(uint32_t& states) {
+  uint8_t data[4] = {};
+  if (!read(SEESAW_GPIO_BASE, SEESAW_GPIO_BULK, data, sizeof(data))) {
+    return false;
+  }
+  states = (static_cast<uint32_t>(data[0]) << 24) |
+           (static_cast<uint32_t>(data[1]) << 16) |
+           (static_cast<uint32_t>(data[2]) << 8) | data[3];
+  return true;
 }
 
 void RotaryControl::begin() {
-  pinMode(BoardConfig::kRotaryA, INPUT_PULLUP);
-  pinMode(BoardConfig::kRotaryB, INPUT_PULLUP);
-  pinMode(BoardConfig::kRotaryButton, INPUT_PULLUP);
-  rotaryState_ = candidateState_ =
-      (digitalRead(BoardConfig::kRotaryA) << 1) |
-      digitalRead(BoardConfig::kRotaryB);
-  rawPressed_ = pressed_ = digitalRead(BoardConfig::kRotaryButton) == LOW;
-  // A button held during boot must be released before it can create an event.
-  buttonArmed_ = !pressed_;
-  candidateSinceMs_ = rawChangedMs_ = millis();
-  Serial.println(F("Rotary control ready: A=GPIO26 B=GPIO27 SW=GPIO32"));
+  Wire.begin(BoardConfig::kI2cSda, BoardConfig::kI2cScl);
+  Wire.setClock(BoardConfig::kI2cFrequencyHz);
+  Wire.setTimeOut(BoardConfig::kI2cTimeoutMs);
+  Serial.printf("ANO I2C: probing 0x%02X on SDA=GPIO%d SCL=GPIO%d\n",
+                BoardConfig::kAnoAddress, BoardConfig::kI2cSda,
+                BoardConfig::kI2cScl);
+  connect(millis());
+}
+
+bool RotaryControl::probe() const {
+  Wire.beginTransmission(BoardConfig::kAnoAddress);
+  return Wire.endTransmission() == 0;
+}
+
+bool RotaryControl::connect(uint32_t now) {
+  lastReconnectAttemptMs_ = now;
+  if (!probe() || !seesaw_.begin(BoardConfig::kAnoAddress, -1, false)) {
+    if (lastErrorLogMs_ == 0 ||
+        now - lastErrorLogMs_ >= BoardConfig::kAnoErrorLogPeriodMs) {
+      Serial.printf("ANO I2C: no response at 0x%02X\n",
+                    BoardConfig::kAnoAddress);
+      lastErrorLogMs_ = now == 0 ? 1 : now;
+    }
+    return false;
+  }
+
+  uint32_t version = 0;
+  const uint16_t productId =
+      seesaw_.readVersionChecked(version) ? version >> 16 : 0;
+  if (productId != BoardConfig::kAnoProductId) {
+    if (lastErrorLogMs_ == 0 ||
+        now - lastErrorLogMs_ >= BoardConfig::kAnoErrorLogPeriodMs) {
+      Serial.printf("ANO I2C: expected product %u, got %u\n",
+                    BoardConfig::kAnoProductId, productId);
+      lastErrorLogMs_ = now == 0 ? 1 : now;
+    }
+    return false;
+  }
+
+  for (uint8_t pin = kFirstButtonPin; pin <= kLastButtonPin; ++pin) {
+    seesaw_.pinMode(pin, INPUT_PULLUP);
+  }
+
+  uint32_t buttonStates = 0;
+  if (!seesaw_.readEncoderChecked(encoderPosition_) ||
+      !seesaw_.readButtonsChecked(buttonStates)) {
+    Serial.println(F("ANO I2C: initialization read failed"));
+    lastErrorLogMs_ = now == 0 ? 1 : now;
+    return false;
+  }
+
+  for (uint8_t pin = kFirstButtonPin; pin <= kLastButtonPin; ++pin) {
+    const bool pressed = (buttonStates & (1UL << pin)) == 0;
+    rawPressed_[pin] = stablePressed_[pin] = pressed;
+    rawChangedMs_[pin] = now;
+  }
+  // SELECT held at boot/reconnect must be released before creating an event.
+  buttonArmed_ = !stablePressed_[BoardConfig::kAnoSelectPin];
+  longPressHandled_ = false;
+  runningWhenPressed_ = false;
+  connected_ = true;
+  lastErrorLogMs_ = 0;
+  lastPollMs_ = now;
+  Serial.printf("ANO I2C: connected, product=%u, position=%ld%s\n",
+                productId, static_cast<long>(encoderPosition_),
+                buttonArmed_ ? "" : ", SELECT held; waiting for release");
+  return true;
+}
+
+void RotaryControl::disconnect(const __FlashStringHelper* reason,
+                               uint32_t now) {
+  if (connected_) {
+    Serial.print(F("ANO I2C: disconnected: "));
+    Serial.println(reason);
+  }
+  connected_ = false;
+  buttonArmed_ = false;
+  longPressHandled_ = false;
+  if (control_.source() == ControlCoordinator::Source::Physical &&
+      motor_.isRunning()) {
+    control_.guardPhysicalStop(true);
+    control_.stop(ControlCoordinator::Source::Physical,
+                  F("ANO I2C communication failure"));
+  }
+  lastReconnectAttemptMs_ = now;
+  lastErrorLogMs_ = now == 0 ? 1 : now;
 }
 
 void RotaryControl::update() {
   const uint32_t now = millis();
-  updateRotation(now);
-  updateButton(now);
-}
-
-void RotaryControl::updateRotation(uint32_t now) {
-  const uint8_t sample = (digitalRead(BoardConfig::kRotaryA) << 1) |
-                         digitalRead(BoardConfig::kRotaryB);
-  if (sample != candidateState_) {
-    candidateState_ = sample;
-    candidateSinceMs_ = now;
+  if (!connected_) {
+    if (now - lastReconnectAttemptMs_ >= BoardConfig::kAnoReconnectPeriodMs) {
+      connect(now);
+    }
     return;
   }
-  if (sample == rotaryState_ ||
-      now - candidateSinceMs_ < BoardConfig::kRotaryDebounceMs) return;
+  if (now - lastPollMs_ < BoardConfig::kAnoPollPeriodMs) return;
+  lastPollMs_ = now;
+  poll(now);
+}
 
-  const int8_t delta = kTransition[(rotaryState_ << 2) | sample];
-  rotaryState_ = sample;
-  if (delta == 0) {
-    quarterSteps_ = 0;
+void RotaryControl::poll(uint32_t now) {
+  int32_t position = 0;
+  uint32_t buttonStates = 0;
+  if (!probe() || !seesaw_.readEncoderChecked(position) ||
+      !seesaw_.readButtonsChecked(buttonStates)) {
+    disconnect(F("read/probe failed"), now);
     return;
   }
-  quarterSteps_ += delta;
-  if (quarterSteps_ >= 4) {
-    quarterSteps_ = 0;
-    applyStep(1);
-  } else if (quarterSteps_ <= -4) {
-    quarterSteps_ = 0;
-    applyStep(-1);
+
+  // Unsigned subtraction gives defined wraparound at the int32 counter edge.
+  const int32_t rawDelta = static_cast<int32_t>(
+      static_cast<uint32_t>(position) -
+      static_cast<uint32_t>(encoderPosition_));
+  if (rawDelta != 0) {
+    encoderPosition_ = position;
+    applySteps(position, rawDelta);
+  }
+  for (uint8_t pin = kFirstButtonPin; pin <= kLastButtonPin; ++pin) {
+    updateButton(pin, (buttonStates & (1UL << pin)) == 0, now);
+  }
+  updateSelectHold(now);
+}
+
+void RotaryControl::applySteps(int32_t position, int32_t rawDelta) {
+  const int64_t clockwiseSteps =
+      static_cast<int64_t>(rawDelta) * BoardConfig::kAnoClockwisePositionSign;
+  const int64_t requested = static_cast<int64_t>(motor_.speedPercent()) +
+                            clockwiseSteps *
+                                BoardConfig::kRotarySpeedStepPercent;
+  const uint8_t next = static_cast<uint8_t>(
+      requested < 0 ? 0 : requested > 100 ? 100 : requested);
+  control_.setSpeedPercent(ControlCoordinator::Source::Physical, next);
+  Serial.printf("ANO ENCODER: position=%ld delta=%ld %s speed=%u%%\n",
+                static_cast<long>(position), static_cast<long>(rawDelta),
+                clockwiseSteps > 0 ? "CW" : "CCW", next);
+}
+
+void RotaryControl::updateButton(uint8_t pin, bool pressed, uint32_t now) {
+  if (pressed != rawPressed_[pin]) {
+    rawPressed_[pin] = pressed;
+    rawChangedMs_[pin] = now;
+  }
+  if (pressed != stablePressed_[pin] &&
+      now - rawChangedMs_[pin] >= BoardConfig::kButtonDebounceMs) {
+    stablePressed_[pin] = pressed;
+    handleButtonChange(pin, pressed, now);
   }
 }
 
-void RotaryControl::applyStep(int8_t direction) {
-  const int next = constrain(static_cast<int>(motor_.speedPercent()) +
-                                 direction * BoardConfig::kRotarySpeedStepPercent,
-                             0, 100);
+const char* RotaryControl::buttonName(uint8_t pin) const {
+  switch (pin) {
+    case BoardConfig::kAnoSelectPin: return "SELECT";
+    case BoardConfig::kAnoUpPin: return "UP";
+    case BoardConfig::kAnoLeftPin: return "LEFT";
+    case BoardConfig::kAnoDownPin: return "DOWN";
+    case BoardConfig::kAnoRightPin: return "RIGHT";
+    default: return "UNKNOWN";
+  }
+}
+
+void RotaryControl::handleButtonChange(uint8_t pin, bool pressed,
+                                       uint32_t now) {
+  Serial.printf("ANO BUTTON: %s %s\n", buttonName(pin),
+                pressed ? "pressed" : "released");
+  if (pin != BoardConfig::kAnoSelectPin) return;
+
+  if (pressed) {
+    if (!buttonArmed_) return;
+    pressedSinceMs_ = now;
+    longPressHandled_ = false;
+    runningWhenPressed_ = motor_.isRunning();
+    return;
+  }
+
+  if (!buttonArmed_) {
+    buttonArmed_ = true;
+    Serial.println(F("ANO BUTTON: SELECT armed after release"));
+    return;
+  }
+  if (longPressHandled_) return;
+
+  if (runningWhenPressed_ || motor_.isRunning()) {
+    control_.guardPhysicalStop(false);
+    control_.stop(ControlCoordinator::Source::Physical,
+                  F("ANO SELECT short press"));
+  } else if (control_.start(ControlCoordinator::Source::Physical)) {
+    Serial.println(F("ANO BUTTON: SELECT short press START"));
+  } else {
+    Serial.println(F("ANO BUTTON: SELECT START rejected"));
+  }
+}
+
+void RotaryControl::updateSelectHold(uint32_t now) {
+  if (!stablePressed_[BoardConfig::kAnoSelectPin] || !buttonArmed_) return;
+  control_.guardPhysicalStop(true);
+  if (longPressHandled_ ||
+      now - pressedSinceMs_ < BoardConfig::kButtonLongPressMs) return;
+
+  longPressHandled_ = true;
+  control_.stop(ControlCoordinator::Source::Physical,
+                F("ANO SELECT long press"));
   control_.setSpeedPercent(ControlCoordinator::Source::Physical,
-                           static_cast<uint8_t>(next));
-  Serial.printf("ROTARY: %s, speed=%d%%\n",
-                direction > 0 ? "clockwise" : "counterclockwise", next);
-}
-
-void RotaryControl::updateButton(uint32_t now) {
-  const bool sample = digitalRead(BoardConfig::kRotaryButton) == LOW;
-  if (sample != rawPressed_) {
-    rawPressed_ = sample;
-    rawChangedMs_ = now;
-  }
-  if (sample != pressed_ &&
-      now - rawChangedMs_ >= BoardConfig::kButtonDebounceMs) {
-    pressed_ = sample;
-    if (pressed_) {
-      if (!buttonArmed_) return;
-      pressedSinceMs_ = now;
-      longPressHandled_ = false;
-      runningWhenPressed_ = motor_.isRunning();
-      Serial.println(F("ROTARY BUTTON: pressed"));
-    } else {
-      if (!buttonArmed_) {
-        buttonArmed_ = true;
-        return;
-      }
-      if (!longPressHandled_) {
-        // Preserve the gesture's press-time intent. If a watchdog stops the
-        // motor while this press is held, release must not become a START.
-        if (runningWhenPressed_ || motor_.isRunning()) {
-          control_.guardPhysicalStop(false);
-          control_.stop(ControlCoordinator::Source::Physical,
-                        F("short press"));
-        } else if (control_.start(ControlCoordinator::Source::Physical)) {
-          Serial.println(F("ROTARY BUTTON: short press START"));
-        }
-      }
-    }
-  }
-
-  if (pressed_ && buttonArmed_) {
-    control_.guardPhysicalStop(true);
-    if (!longPressHandled_ &&
-        now - pressedSinceMs_ >= BoardConfig::kButtonLongPressMs) {
-      longPressHandled_ = true;
-      control_.stop(ControlCoordinator::Source::Physical, F("long press"));
-      control_.setSpeedPercent(ControlCoordinator::Source::Physical,
-                               BoardConfig::kDefaultSpeedPercent);
-      Serial.printf("ROTARY BUTTON: long press STOP, preset=%u%%\n",
-                    BoardConfig::kDefaultSpeedPercent);
-    }
-  }
+                           BoardConfig::kDefaultSpeedPercent);
+  Serial.printf("ANO BUTTON: SELECT long press STOP, preset=%u%%\n",
+                BoardConfig::kDefaultSpeedPercent);
 }

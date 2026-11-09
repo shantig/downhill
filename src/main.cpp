@@ -12,8 +12,8 @@ MotorController motor;
 Encoder encoder;
 ControlCoordinator control(motor);
 SerialConsole console(motor, encoder, control);
-RemoteControl remote(motor, encoder, control);
 RotaryControl rotary(control, motor);
+RemoteControl remote(motor, encoder, control, rotary);
 
 void setup() {
   // Motor safety is initialized before the serial console or encoder.
