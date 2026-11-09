@@ -4,14 +4,15 @@
 #include <WebServer.h>
 
 #include "Encoder.h"
+#include "ControlCoordinator.h"
 #include "MotorController.h"
 #include "SerialConsole.h"
 
 class RemoteControl {
  public:
   RemoteControl(MotorController& motor, Encoder& encoder,
-                SerialConsole& console)
-      : motor_(motor), encoder_(encoder), console_(console), server_(80) {}
+                ControlCoordinator& control)
+      : motor_(motor), encoder_(encoder), control_(control), server_(80) {}
 
   void begin();
   void update();
@@ -34,7 +35,7 @@ class RemoteControl {
 
   MotorController& motor_;
   Encoder& encoder_;
-  SerialConsole& console_;
+  ControlCoordinator& control_;
   WebServer server_;
   bool remoteLeaseActive_ = false;
   uint32_t lastHeartbeatMs_ = 0;

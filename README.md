@@ -19,6 +19,14 @@ pass/fail result. A 1 A current limit is slightly below the motor's published
 maximum locked-rotor current (1.1 A), which is useful protection but may trip
 under startup or auger load.
 
+The repository's complete firmware pin audit assigns only GPIO 17, 21, 25, 34,
+and 35. The proposed GPIO 26, 27, and 32 therefore do not conflict with any
+enabled motor, encoder, Wi-Fi, serial, PWM, or other peripheral in this build.
+They are bidirectional ESP32 GPIOs with internal pull-ups (unlike GPIO 34/35),
+so they are suitable for the mechanical encoder and switch. This is a firmware
+and published Motor A assignment verification; the new wiring has not been
+bench-tested on the board.
+
 ## Build and flash
 
 1. Install [VS Code](https://code.visualstudio.com/) and the PlatformIO extension, or PlatformIO Core.
@@ -77,6 +85,24 @@ motor encoder contains pull-ups and the board's matched 6-pin connection is the
 intended interface. If using a custom cable, first verify its pinout against
 Waveshare's encoder connector diagram; do not infer wire function by color.
 
+### Adafruit #377 rotary control
+
+With all power off, wire the separate mechanical encoder as follows:
+
+| Encoder connection | ESP32 connection |
+| --- | --- |
+| Terminal A | GPIO 26 |
+| Terminal B | GPIO 27 |
+| Terminal C (common) | GND |
+| Either push-button terminal | GPIO 32 |
+| Other push-button terminal | GND |
+
+The firmware configures GPIO 26, 27, and 32 as `INPUT_PULLUP`; do not add an
+external voltage to these inputs. It debounces quadrature transitions, emits
+one 5% change per complete step, and separately debounces the button. Clockwise
+raises the preset and counterclockwise lowers it. If the observed direction is
+reversed during hardware testing, power down and swap A and B.
+
 ## Serial commands
 
 Commands are case-insensitive and newline-terminated:
@@ -92,7 +118,7 @@ Commands are case-insensitive and newline-terminated:
 | `TIMEOUT 3000` | Set command watchdog in ms (500–30000) |
 | `HELP` | Print command summary |
 
-Startup is always stopped. A direction change de-energizes Motor A, waits 20 ms,
+Startup is always stopped with a 60% speed preset. A direction change de-energizes Motor A, waits 20 ms,
 changes direction, and requires a separate `START`. While running, no valid
 command for 3 seconds triggers a stop. Reboot, malformed commands, and a zero
 speed never start the motor.
@@ -109,16 +135,33 @@ A fresh hold gesture creates a remote-control lease. Heartbeats only extend an
 existing lease and cannot create or restart one. Direction controls end the
 lease and stop the bridge before changing direction. The remote STOP endpoint
 always stops the motor, including motion started over serial. While a remote
-lease is active, its 500 ms watchdog supersedes the serial watchdog; when the
-lease ends, the existing serial timeout resumes. The physical board power
-switch remains the independent cutoff.
+lease is active, its 500 ms watchdog applies. Taking web ownership first safely
+stops serial-owned motion, so the serial watchdog is never suspended or
+extended. The physical board power switch remains the independent cutoff.
+
+Physical, web, and serial commands share the same authoritative motor state.
+The most recent deliberate command owns control (`PHYSICAL`, `WEB`, or
+`SERIAL`), and every ownership change first performs a safe STOP. A physical
+rotation can change a stopped preset or adjust speed while physical control is
+already running; taking control from web or serial stops first. A short press
+toggles run/stop. A press held for at least one second stops and resets the
+preset to 60%, with no short-press action on release.
+
+Serial-owned motion retains its configured 3-second command timeout. Web-owned
+motion retains its 500 ms heartbeat lease. Physical control has no software
+keepalive, but taking physical ownership never suspends or lengthens either
+watchdog: it safely stops the previous owner first. A physical STOP cancels a
+web lease. While the button is held, and briefly after a physical STOP, remote
+and serial START requests are rejected. A button held during startup must be
+released before it can create an event, and a long press cannot become a
+short-press restart on release.
 
 The built-in, loop-serviced `WebServer` keeps request handlers short and does no
 blocking network waits. Useful endpoints are:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/api/status` | GET | Live motor, encoder, and remote-lease state |
+| `/api/status` | GET | Live motor, encoder, source, and remote-lease state |
 | `/api/diagnostics` | GET | Uptime, free heap, AP IP, clients, stop count |
 | `/api/speed?value=20` | POST | Set PWM percentage |
 | `/api/direction?value=forward` | POST | Stop and select direction |
@@ -142,6 +185,19 @@ blocking network waits. Useful endpoints are:
 - Reconnect after each trial and confirm the motor remains stopped until a new
   deliberate hold gesture. Verify the web STOP button also stops a serial
   `START` command.
+- Confirm the dashboard updates speed, state, RPM, and control source after
+  each physical action without reloading.
+- Rotate one detent each way and confirm exactly one 5% change per detent. Test
+  slow turns and noisy partial turns. If clockwise decreases, power down and
+  swap encoder terminals A and B.
+- Short-press to start and stop. Long-press for at least one second and confirm
+  STOP plus a 60% preset, with no restart on release. Boot while holding the
+  button and confirm releasing it does not start the motor.
+- While web-held and serial-running, use the physical button to STOP. Confirm
+  the web lease ends and neither a heartbeat nor a held button restarts it.
+- Trigger web heartbeat and serial command timeouts separately. Hold the button
+  during each timeout and confirm no restart; release it, then require a new
+  deliberate command. Verify each source transition first produces a safe STOP.
 
 ### 2. Unloaded motor
 
@@ -164,8 +220,10 @@ blocking network waits. Useful endpoints are:
 
 - `include/BoardConfig.h`: verified GPIOs and tunable constants
 - `src/MotorController.cpp`: bridge/PWM safety behavior
+- `src/ControlCoordinator.cpp`: authoritative ownership and timeout behavior
+- `src/RotaryControl.cpp`: debounced quadrature and push-button input
 - `src/Encoder.cpp`: signed pulse counting and RPM calculation
-- `src/SerialConsole.cpp`: command parsing and watchdog
+- `src/SerialConsole.cpp`: command parsing and diagnostics
 - `src/RemoteControl.cpp`: SoftAP, HTTP API, and 500 ms remote lease
 - `src/WebDashboard.cpp`: embedded responsive dashboard
 - `src/main.cpp`: minimal application wiring

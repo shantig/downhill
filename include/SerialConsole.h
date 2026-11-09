@@ -3,18 +3,17 @@
 #include <Arduino.h>
 
 #include "Encoder.h"
+#include "ControlCoordinator.h"
 #include "MotorController.h"
 
 class SerialConsole {
  public:
-  SerialConsole(MotorController& motor, Encoder& encoder)
-      : motor_(motor), encoder_(encoder) {}
+  SerialConsole(MotorController& motor, Encoder& encoder,
+                ControlCoordinator& control)
+      : motor_(motor), encoder_(encoder), control_(control) {}
 
   void begin();
   void update();
-  void checkTimeout();
-  void suspendWatchdog();
-  void resumeWatchdog();
 
  private:
   void execute(String command);
@@ -24,8 +23,6 @@ class SerialConsole {
 
   MotorController& motor_;
   Encoder& encoder_;
+  ControlCoordinator& control_;
   String input_;
-  uint32_t lastValidCommandMs_ = 0;
-  uint32_t timeoutMs_ = 0;
-  bool watchdogSuspended_ = false;
 };

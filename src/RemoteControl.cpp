@@ -39,6 +39,12 @@ void RemoteControl::begin() {
 }
 
 void RemoteControl::update() {
+  if (remoteLeaseActive_ &&
+      control_.source() != ControlCoordinator::Source::Web) {
+    remoteLeaseActive_ = false;
+    ++remoteStops_;
+    Serial.println(F("REMOTE LEASE: ended by control ownership change"));
+  }
   server_.handleClient();
   if (remoteLeaseActive_ &&
       millis() - lastHeartbeatMs_ > BoardConfig::kRemoteHeartbeatTimeoutMs) {
@@ -120,6 +126,9 @@ void RemoteControl::handleStatus() {
   body += encoder_.count();
   body += F(",\"remoteLease\":");
   body += remoteLeaseActive_ ? F("true") : F("false");
+  body += F(",\"source\":\"");
+  body += control_.sourceName();
+  body += F("\"");
   body += F("}");
   sendJson(200, body);
 }
@@ -151,7 +160,8 @@ void RemoteControl::handleSpeed() {
     sendJson(400, F("{\"ok\":false,\"error\":\"speed must be 0..100\"}"));
     return;
   }
-  motor_.setSpeedPercent(static_cast<uint8_t>(value));
+  control_.setSpeedPercent(ControlCoordinator::Source::Web,
+                           static_cast<uint8_t>(value));
   if (value == 0 && remoteLeaseActive_) stopRemote(F("zero speed"));
   sendJson(200, F("{\"ok\":true}"));
 }
@@ -161,9 +171,11 @@ void RemoteControl::handleDirection() {
   const String value = server_.arg("value");
   if (remoteLeaseActive_) stopRemote(F("direction change"));
   if (value == "forward") {
-    motor_.setDirection(MotorController::Direction::Forward);
+    control_.setDirection(ControlCoordinator::Source::Web,
+                          MotorController::Direction::Forward);
   } else if (value == "reverse") {
-    motor_.setDirection(MotorController::Direction::Reverse);
+    control_.setDirection(ControlCoordinator::Source::Web,
+                          MotorController::Direction::Reverse);
   } else {
     sendJson(400, F("{\"ok\":false,\"error\":\"invalid direction\"}"));
     return;
@@ -187,10 +199,17 @@ void RemoteControl::handleRun() {
 
   // A fresh pointer-down request is the only path that starts a remote lease.
   // Heartbeats can maintain a lease but can never create or restart one.
-  console_.suspendWatchdog();
+  if (!control_.canStart(ControlCoordinator::Source::Web)) {
+    sendJson(409, F("{\"ok\":false,\"error\":\"physical stop active\"}"));
+    return;
+  }
   remoteLeaseActive_ = true;
   lastHeartbeatMs_ = millis();
-  motor_.start();
+  if (!control_.start(ControlCoordinator::Source::Web)) {
+    remoteLeaseActive_ = false;
+    sendJson(409, F("{\"ok\":false,\"error\":\"run rejected\"}"));
+    return;
+  }
   sendJson(200, F("{\"ok\":true,\"running\":true}"));
 }
 
@@ -200,6 +219,7 @@ void RemoteControl::handleHeartbeat() {
     return;
   }
   lastHeartbeatMs_ = millis();
+  control_.activity(ControlCoordinator::Source::Web);
   sendJson(200, F("{\"ok\":true}"));
 }
 
@@ -211,12 +231,11 @@ void RemoteControl::handleStop() {
 }
 
 void RemoteControl::stopRemote(const __FlashStringHelper* reason) {
-  motor_.stop();
+  control_.stop(ControlCoordinator::Source::Web, reason);
   if (remoteLeaseActive_) {
     ++remoteStops_;
     Serial.print(F("REMOTE STOP: "));
     Serial.println(reason);
   }
   remoteLeaseActive_ = false;
-  console_.resumeWatchdog();
 }
