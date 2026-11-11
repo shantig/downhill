@@ -30,7 +30,9 @@ class RotaryControl {
   void poll(uint32_t now);
   void updateButton(uint8_t pin, bool pressed, uint32_t now);
   void handleButtonChange(uint8_t pin, bool pressed, uint32_t now);
-  void updateSelectHold(uint32_t now);
+  void updateSelectActions(uint32_t now);
+  void handleSelectShortPress();
+  void reverseDirection();
   void applySteps(int32_t position, int32_t rawDelta);
   const char* buttonName(uint8_t pin) const;
 
@@ -44,7 +46,11 @@ class RotaryControl {
   bool buttonArmed_ = false;
   bool longPressHandled_ = false;
   bool runningWhenPressed_ = false;
+  bool shortPressPending_ = false;
+  bool deferredShortPress_ = false;
+  bool doublePressCandidate_ = false;
   uint32_t pressedSinceMs_ = 0;
+  uint32_t firstShortReleaseMs_ = 0;
   uint32_t lastPollMs_ = 0;
   uint32_t lastReconnectAttemptMs_ = 0;
   uint32_t lastErrorLogMs_ = 0;

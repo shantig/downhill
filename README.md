@@ -99,8 +99,9 @@ The firmware starts `Wire` on GPIO 32/33 at 100 kHz with a 20 ms transaction
 timeout, probes address `0x49`, verifies product ID 5740, enables seesaw input
 pull-ups, and records the initial absolute encoder position without creating an
 event. Clockwise changes speed +5% per reported step and counterclockwise -5%,
-clamped to 0–100%. SELECT controls START/STOP and long-press reset; the other
-four buttons currently log press/release diagnostics only. The configured
+clamped to 0–100%. SELECT controls START/STOP, double-press direction reversal,
+and long-press reset; the other four buttons currently log press/release
+diagnostics only. The configured
 encoder sign follows the expected ANO mounting but must be confirmed during
 Stage A; if reversed, change `kAnoClockwisePositionSign` rather than rewiring
 the I2C bus.
@@ -120,7 +121,7 @@ Commands are case-insensitive and newline-terminated:
 | `TIMEOUT 3000` | Set command watchdog in ms (500–30000) |
 | `HELP` | Print command summary |
 
-Startup is always stopped with a 60% speed preset. A direction change de-energizes Motor A, waits 20 ms,
+Startup is always stopped in reverse with a 60% speed preset. A direction change de-energizes Motor A, waits 20 ms,
 changes direction, and requires a separate `START`. While running, no valid
 command for 3 seconds triggers a stop. Reboot, malformed commands, and a zero
 speed never start the motor.
@@ -146,7 +147,9 @@ The most recent deliberate command owns control (`PHYSICAL`, `WEB`, or
 `SERIAL`), and every ownership change first performs a safe STOP. A physical
 rotation can change a stopped preset or adjust speed while physical control is
 already running; taking control from web or serial stops first. A short press
-toggles run/stop. A press held for at least one second stops and resets the
+stops a running motor immediately; START waits for the 400 ms double-press
+window. A double press stops and reverses direction; a separate short press is
+required to restart. A press held for at least one second stops and resets the
 preset to 60%, with no short-press action on release.
 
 Serial-owned motion retains its configured 3-second command timeout. Web-owned
@@ -192,8 +195,9 @@ No physical validation is claimed until these checks are completed and recorded.
 - Turn both directions and compare position/delta logs. Confirm one 5% change
   per reported wheel step and the intended clockwise sign.
 - Press and release SELECT, UP, DOWN, LEFT, and RIGHT; confirm each diagnostic.
-- Confirm SELECT short press toggles and a >=1 second press stops and restores
-  60%, without a short-press action on release.
+- Confirm SELECT short press toggles, double press stops and reverses direction,
+  and a >=1 second press stops and restores 60%, without a short-press action
+  on release.
 - Disconnect SDA, SCL, or the entire cable. Confirm disconnected status and no
   fabricated button event. Reconnect and confirm product/position revalidation.
 - Reconnect or boot while holding SELECT. Release it and confirm no START; then

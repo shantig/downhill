@@ -19,7 +19,7 @@ class MotorController {
  private:
   void applyOutput();
 
-  Direction direction_ = Direction::Forward;
+  Direction direction_ = Direction::Reverse;
   uint8_t speedPercent_ = 0;
   bool running_ = false;
 };

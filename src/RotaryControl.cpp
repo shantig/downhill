@@ -105,6 +105,9 @@ bool RotaryControl::connect(uint32_t now) {
   buttonArmed_ = !stablePressed_[BoardConfig::kAnoSelectPin];
   longPressHandled_ = false;
   runningWhenPressed_ = false;
+  shortPressPending_ = false;
+  deferredShortPress_ = false;
+  doublePressCandidate_ = false;
   connected_ = true;
   lastErrorLogMs_ = 0;
   lastPollMs_ = now;
@@ -123,6 +126,9 @@ void RotaryControl::disconnect(const __FlashStringHelper* reason,
   connected_ = false;
   buttonArmed_ = false;
   longPressHandled_ = false;
+  shortPressPending_ = false;
+  deferredShortPress_ = false;
+  doublePressCandidate_ = false;
   if (control_.source() == ControlCoordinator::Source::Physical &&
       motor_.isRunning()) {
     control_.guardPhysicalStop(true);
@@ -166,7 +172,7 @@ void RotaryControl::poll(uint32_t now) {
   for (uint8_t pin = kFirstButtonPin; pin <= kLastButtonPin; ++pin) {
     updateButton(pin, (buttonStates & (1UL << pin)) == 0, now);
   }
-  updateSelectHold(now);
+  updateSelectActions(now);
 }
 
 void RotaryControl::applySteps(int32_t position, int32_t rawDelta) {
@@ -214,6 +220,16 @@ void RotaryControl::handleButtonChange(uint8_t pin, bool pressed,
 
   if (pressed) {
     if (!buttonArmed_) return;
+    if (shortPressPending_ &&
+        rawChangedMs_[pin] - firstShortReleaseMs_ <=
+            BoardConfig::kButtonDoublePressMs) {
+      doublePressCandidate_ = true;
+    } else {
+      if (deferredShortPress_) handleSelectShortPress();
+      shortPressPending_ = false;
+      deferredShortPress_ = false;
+      doublePressCandidate_ = false;
+    }
     pressedSinceMs_ = now;
     longPressHandled_ = false;
     runningWhenPressed_ = motor_.isRunning();
@@ -227,6 +243,21 @@ void RotaryControl::handleButtonChange(uint8_t pin, bool pressed,
   }
   if (longPressHandled_) return;
 
+  if (doublePressCandidate_) {
+    shortPressPending_ = false;
+    deferredShortPress_ = false;
+    doublePressCandidate_ = false;
+    reverseDirection();
+    return;
+  }
+
+  shortPressPending_ = true;
+  deferredShortPress_ = !(runningWhenPressed_ || motor_.isRunning());
+  firstShortReleaseMs_ = now;
+  if (!deferredShortPress_) handleSelectShortPress();
+}
+
+void RotaryControl::handleSelectShortPress() {
   if (runningWhenPressed_ || motor_.isRunning()) {
     control_.guardPhysicalStop(false);
     control_.stop(ControlCoordinator::Source::Physical,
@@ -238,13 +269,37 @@ void RotaryControl::handleButtonChange(uint8_t pin, bool pressed,
   }
 }
 
-void RotaryControl::updateSelectHold(uint32_t now) {
-  if (!stablePressed_[BoardConfig::kAnoSelectPin] || !buttonArmed_) return;
+void RotaryControl::reverseDirection() {
+  const MotorController::Direction next =
+      motor_.direction() == MotorController::Direction::Forward
+          ? MotorController::Direction::Reverse
+          : MotorController::Direction::Forward;
+  control_.guardPhysicalStop(false);
+  control_.setDirection(ControlCoordinator::Source::Physical, next);
+  Serial.printf("ANO BUTTON: SELECT double press STOP, direction=%s\n",
+                next == MotorController::Direction::Forward ? "FORWARD"
+                                                            : "REVERSE");
+}
+
+void RotaryControl::updateSelectActions(uint32_t now) {
+  const bool selectPressed = stablePressed_[BoardConfig::kAnoSelectPin];
+  if (!selectPressed &&
+      !rawPressed_[BoardConfig::kAnoSelectPin] && shortPressPending_ &&
+      now - firstShortReleaseMs_ > BoardConfig::kButtonDoublePressMs) {
+    shortPressPending_ = false;
+    if (deferredShortPress_) handleSelectShortPress();
+    deferredShortPress_ = false;
+  }
+
+  if (!selectPressed || !buttonArmed_) return;
   control_.guardPhysicalStop(true);
   if (longPressHandled_ ||
       now - pressedSinceMs_ < BoardConfig::kButtonLongPressMs) return;
 
   longPressHandled_ = true;
+  shortPressPending_ = false;
+  deferredShortPress_ = false;
+  doublePressCandidate_ = false;
   control_.stop(ControlCoordinator::Source::Physical,
                 F("ANO SELECT long press"));
   control_.setSpeedPercent(ControlCoordinator::Source::Physical,

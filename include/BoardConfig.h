@@ -41,6 +41,7 @@ constexpr uint32_t kDirectionDeadTimeMs = 20;
 constexpr uint8_t kDefaultSpeedPercent = 60;
 constexpr uint8_t kRotarySpeedStepPercent = 5;
 constexpr uint32_t kButtonDebounceMs = 25;
+constexpr uint32_t kButtonDoublePressMs = 400;
 constexpr uint32_t kButtonLongPressMs = 1000;
 constexpr uint32_t kPhysicalStopGuardMs = 250;
 constexpr uint32_t kAnoPollPeriodMs = 10;
