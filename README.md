@@ -28,14 +28,60 @@ disconnect behavior have not yet been bench-tested on the Rev1.2 board.
 
 ## First installation over USB
 
-1. Install [VS Code](https://code.visualstudio.com/) and the PlatformIO extension, or PlatformIO Core.
-2. Copy `include/Secrets.example.h` to `include/Secrets.h`. Set a unique SoftAP password and separate firmware-administrator username and password as described below.
-3. Connect the board's USB Type-C port labeled for ESP32 communication (not the LIDAR Type-C port).
-4. Leave the external 12 V motor supply switched off for the first flash.
-5. Run `pio run`. The compiled upload image is `.pio/build/waveshare_general_driver/firmware.bin`.
-6. Run `pio run --target upload`.
-7. Open `pio device monitor --baud 115200` and reset the board. It must report `motor is SAFE/STOPPED` and must not report that OTA credentials are unconfigured.
-8. If automatic upload does not begin, follow the Waveshare board's download-button procedure, then retry.
+The easiest installation uses [ESPHome Web](https://web.esphome.io/) and the
+private `downhill-factory.bin` GitHub Actions artifact. This factory image is a
+complete image for offset `0x0`; do not use the OTA-only `firmware.bin` for a
+blank board.
+
+### Install with ESPHome Web (beginner method)
+
+1. On the repository's **Actions** page, open a successful **Build firmware**
+   run. Sign in to GitHub if asked, download its
+   `downhill-dispatcher-<commit>` artifact, and unzip it. Artifacts are private
+   to people who can access the repository; never copy these credential-bearing
+   binaries to a public release or unauthenticated download.
+2. Switch off the external 12 V motor supply. Leave it off throughout flashing
+   so the mechanism cannot move. Connect the board's USB Type-C port used for
+   ESP32 communication, not the LIDAR Type-C port, with a data-capable cable.
+3. Open [ESPHome Web](https://web.esphome.io/) in current Chrome or Edge. It
+   requires a secure browser context and Web Serial support.
+4. Choose **Connect**. In the browser's serial-device picker, select the entry
+   named **CP2102 USB to UART Bridge Controller** (it may instead show a COM or
+   `/dev/ttyUSB` name), then choose **Connect**. Do not select an unrelated
+   serial device.
+5. Choose **Install**, select the unzipped `downhill-factory.bin`, and confirm.
+   Keep the page open, USB cable connected, and computer awake until ESPHome
+   Web reports completion. The merged file is already based at offset `0x0`.
+6. If the device is not listed, try a known data cable and another USB port,
+   then install the computer's CP210x/CP2102 driver if needed. If flashing does
+   not start, place the board in download mode using the Waveshare download
+   button procedure and retry.
+7. After the board restarts, join the WPA2 network `Downhill-Dispatcher` using
+   the configured SoftAP password and open `http://192.168.4.1/`.
+8. Verify the dashboard loads, the expected version or Git commit is shown,
+   and motor state is **STOPPED** before restoring motor power. Initial flashing
+   has not been validated on physical hardware by this repository.
+
+### Build and install locally with PlatformIO
+
+1. Install [VS Code](https://code.visualstudio.com/) and the PlatformIO
+   extension, or PlatformIO Core.
+2. Copy `include/Secrets.example.h` to `include/Secrets.h`. Set a unique SoftAP
+   password and separate firmware-administrator username and password as
+   described below.
+3. Connect the board's ESP32 USB Type-C port and leave the external 12 V motor
+   supply switched off.
+4. Run `pio run`. The OTA image is
+   `.pio/build/waveshare_general_driver/firmware.bin`.
+5. Run `pio run --target idedata`, then
+   `python scripts/build_factory_image.py` to create and validate
+   `.pio/build/waveshare_general_driver/downhill-factory.bin`, or run
+   `pio run --target upload` to flash directly with PlatformIO.
+6. Open `pio device monitor --baud 115200` and reset the board. It must report
+   `motor is SAFE/STOPPED` and must not report that OTA credentials are
+   unconfigured.
+7. If automatic upload does not begin, follow the Waveshare board's
+   download-button procedure, then retry.
 
 PlatformIO uses the generic `esp32dev` definition because the controller is an
 ESP32-WROOM-32UE and Waveshare does not publish a dedicated PlatformIO board
@@ -43,12 +89,22 @@ manifest. The environment is pinned for reproducibility and resolves to
 Arduino-ESP32 2.0.17. The official Adafruit seesaw library is pinned to 1.7.9;
 its dependencies are resolved by PlatformIO.
 
-The generic ESP32 board definition uses Arduino's standard 4 MB partition
+The generic ESP32 board definition uses DIO flash mode at 40 MHz and Arduino's
+standard 4 MB partition
 layout. It provides two 1,310,720-byte application slots (`app0` and `app1`)
 and an OTA metadata partition. The firmware can therefore be installed over
 USB once and updated between slots afterward; no partition migration is
 required. The build reports the exact image use and fails if it outgrows a
 slot.
+
+The factory-image script reads the paths and offsets emitted by the current
+PlatformIO build instead of inventing a second layout. It requires and verifies
+the current ESP32 layout: bootloader at `0x1000`, partition table at `0x8000`,
+`boot_app0.bin` at `0xE000`, and application at `0x10000`. It also checks the
+board manifest and bootloader header agree on DIO, 40 MHz, and 4 MB, asks
+Espressif esptool to validate both executable images, verifies every merged
+payload at its expected offset, enforces the 4 MB boundary, and prints the
+factory image's SHA-256 digest.
 
 ## Configure the private SoftAP
 
@@ -141,15 +197,26 @@ or automatic downloader, so a person must join the local Wi-Fi and upload a
 file directly. This is why the device cannot be updated remotely over the
 internet in its present configuration.
 
-## GitHub Actions firmware artifact
+## GitHub Actions firmware artifacts
 
 `.github/workflows/firmware.yml` builds on pushes to `main` and manual workflow
 runs. Before using it, configure the repository's Actions secrets
 `AP_PASSWORD`, `OTA_USERNAME`, and `OTA_PASSWORD`. The workflow validates that
 the passwords meet the firmware rules, creates the ignored `Secrets.h` only on
-the runner, runs `pio run`, and retains `firmware.bin` as a downloadable
-artifact for 30 days. Access to the repository artifact should be limited
-because the compiled binary contains those device credentials.
+the runner, runs `pio run`, derives the exact PlatformIO flash layout, and uses
+Espressif esptool to create the merged image. One private artifact is retained
+for 30 days and contains exactly these installable files:
+
+- `downhill-factory.bin`: merged 4 MB-layout image for ESPHome Web or another
+  flasher writing at offset `0x0`; use this for initial USB installation and
+  USB recovery.
+- `firmware.bin`: application-only image for the authenticated browser OTA page;
+  do not use it as a blank-board factory image.
+
+Repository workflow artifacts require authorized GitHub access, but anyone who
+downloads either binary can extract or reuse its compiled credentials. Limit
+artifact access, share only through a trusted private channel, and never attach
+the files to a public GitHub Release or unauthenticated website.
 
 ## Connect from an iPhone or Mac
 
@@ -366,6 +433,7 @@ supply switched off. No hardware validation is claimed by this repository.
 - `src/WebDashboard.cpp`: embedded responsive dashboard
 - `include/FirmwareInfo.h`: displayed version, Git commit, and build metadata
 - `scripts/firmware_version.py`: build-time Git commit injection
+- `scripts/build_factory_image.py`: verified esptool factory-image generation
 - `src/main.cpp`: minimal application wiring
 
 Encoder RPM assumes Waveshare's published 1050 PPR output-shaft value while

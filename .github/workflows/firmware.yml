@@ -64,10 +64,18 @@ jobs:
       - name: Build firmware
         run: pio run
 
-      - name: Upload firmware artifact
+      - name: Export PlatformIO flash layout
+        run: pio run --target idedata > /dev/null
+
+      - name: Build and validate ESPHome Web factory image
+        run: python scripts/build_factory_image.py --environment waveshare_general_driver
+
+      - name: Upload private firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: downhill-dispatcher-${{ github.sha }}
-          path: .pio/build/waveshare_general_driver/firmware.bin
+          path: |
+            .pio/build/waveshare_general_driver/downhill-factory.bin
+            .pio/build/waveshare_general_driver/firmware.bin
           if-no-files-found: error
           retention-days: 30
