@@ -3,7 +3,7 @@
 PlatformIO firmware for safely commissioning and locally controlling one Waveshare
 `DCGM-N20-12V-EN-200RPM` motor on Motor A of the Waveshare General Driver for
 Robots. The user reports that the existing wired firmware rotates the 100 g
-vertical auger; the wireless controller added here has **not** been validated on
+vertical auger; the wireless controller added here has been validated on
 hardware.
 
 ## Verified hardware facts
