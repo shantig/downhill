@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "BoardConfig.h"
+#include "FirmwareInfo.h"
 #include "Secrets.h"
 #include "WebDashboard.h"
 
@@ -46,6 +47,7 @@ void RemoteControl::update() {
     Serial.println(F("REMOTE LEASE: ended by control ownership change"));
   }
   server_.handleClient();
+  ota_.update();
   if (remoteLeaseActive_ &&
       millis() - lastHeartbeatMs_ > BoardConfig::kRemoteHeartbeatTimeoutMs) {
     stopRemote(F("heartbeat timeout"));
@@ -66,6 +68,7 @@ void RemoteControl::configureRoutes() {
   server_.on("/api/heartbeat", HTTP_POST,
              [this]() { handleHeartbeat(); });
   server_.on("/api/stop", HTTP_POST, [this]() { handleStop(); });
+  ota_.begin([this]() { revokeRemoteLeaseForUpdate(); });
   server_.onNotFound([this]() {
     sendJson(404, F("{\"ok\":false,\"error\":\"not found\"}"));
   });
@@ -131,18 +134,31 @@ void RemoteControl::handleStatus() {
   body += F("\"");
   body += F(",\"anoConnected\":");
   body += rotary_.connected() ? F("true") : F("false");
+  body += F(",\"updating\":");
+  body += control_.firmwareUpdateInProgress() ? F("true") : F("false");
   body += F("}");
   sendJson(200, body);
 }
 
 void RemoteControl::handleDiagnostics() {
   String body;
-  body.reserve(180);
+  body.reserve(320);
   body += F("{\"uptimeMs\":");
   body += millis();
   body += F(",\"freeHeap\":");
   body += ESP.getFreeHeap();
-  body += F(",\"apIp\":\"");
+  body += F(",\"availableFlash\":");
+  const size_t freeSketchSpace = ESP.getFreeSketchSpace();
+  body += freeSketchSpace > 0x1000
+              ? (freeSketchSpace - 0x1000) & 0xFFFFF000
+              : 0;
+  body += F(",\"firmwareVersion\":\"");
+  body += FirmwareInfo::kVersion;
+  body += F("\",\"gitCommit\":\"");
+  body += FirmwareInfo::kGitCommit;
+  body += F("\",\"buildDate\":\"");
+  body += FirmwareInfo::kBuildDate;
+  body += F("\",\"apIp\":\"");
   body += WiFi.softAPIP().toString();
   body += F("\",\"stations\":");
   body += WiFi.softAPgetStationNum();
@@ -240,4 +256,13 @@ void RemoteControl::stopRemote(const __FlashStringHelper* reason) {
     Serial.println(reason);
   }
   remoteLeaseActive_ = false;
+}
+
+void RemoteControl::revokeRemoteLeaseForUpdate() {
+  if (remoteLeaseActive_) {
+    ++remoteStops_;
+    Serial.println(F("REMOTE LEASE: revoked for firmware update"));
+  }
+  remoteLeaseActive_ = false;
+  motor_.stop();
 }

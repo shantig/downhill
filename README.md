@@ -26,20 +26,29 @@ Motor A or its encoder. Motor B uses GPIO 22/23/26/16/27, so the earlier plan to
 use GPIO 26/27 for a bare encoder has been removed. The ANO adapter wiring and
 disconnect behavior have not yet been bench-tested on the Rev1.2 board.
 
-## Build and flash
+## First installation over USB
 
 1. Install [VS Code](https://code.visualstudio.com/) and the PlatformIO extension, or PlatformIO Core.
-2. Connect the board's USB Type-C port labeled for ESP32 communication (not the LIDAR Type-C port).
-3. Leave the external 12 V supply switched off for the first flash.
-4. Run `pio run` and then `pio run --target upload`.
-5. Open `pio device monitor --baud 115200` and reset the board. It must report `motor is SAFE/STOPPED`.
-6. If automatic upload does not begin, follow the Waveshare board's download-button procedure, then retry.
+2. Copy `include/Secrets.example.h` to `include/Secrets.h`. Set a unique SoftAP password and separate firmware-administrator username and password as described below.
+3. Connect the board's USB Type-C port labeled for ESP32 communication (not the LIDAR Type-C port).
+4. Leave the external 12 V motor supply switched off for the first flash.
+5. Run `pio run`. The compiled upload image is `.pio/build/waveshare_general_driver/firmware.bin`.
+6. Run `pio run --target upload`.
+7. Open `pio device monitor --baud 115200` and reset the board. It must report `motor is SAFE/STOPPED` and must not report that OTA credentials are unconfigured.
+8. If automatic upload does not begin, follow the Waveshare board's download-button procedure, then retry.
 
 PlatformIO uses the generic `esp32dev` definition because the controller is an
 ESP32-WROOM-32UE and Waveshare does not publish a dedicated PlatformIO board
 manifest. The environment is pinned for reproducibility and resolves to
 Arduino-ESP32 2.0.17. The official Adafruit seesaw library is pinned to 1.7.9;
 its dependencies are resolved by PlatformIO.
+
+The generic ESP32 board definition uses Arduino's standard 4 MB partition
+layout. It provides two 1,310,720-byte application slots (`app0` and `app1`)
+and an OTA metadata partition. The firmware can therefore be installed over
+USB once and updated between slots afterward; no partition migration is
+required. The build reports the exact image use and fails if it outgrows a
+slot.
 
 ## Configure the private SoftAP
 
@@ -48,11 +57,99 @@ The firmware creates a WPA2-protected access point named
 
 1. Copy `include/Secrets.example.h` to `include/Secrets.h`.
 2. Replace `kApPassword` with a unique password of at least eight characters.
-3. Do not force-add `include/Secrets.h`: it is excluded by `.gitignore` so the
+3. Set `kOtaUsername` and a unique `kOtaPassword` of at least 12 characters.
+   The OTA password must differ from the SoftAP password. Browser updating is
+   disabled while the example placeholder remains.
+4. Do not force-add `include/Secrets.h`: it is excluded by `.gitignore` so the
    credential cannot be committed accidentally.
 
 A local `include/Secrets.h` is already present in this workspace for builds,
-but its placeholder password must be changed before operating the motor.
+but all placeholder passwords must be changed before operating the motor or
+using OTA.
+
+## Subsequent browser firmware updates
+
+Compile and install only binaries built for this exact project and board. OTA
+streams the image into the inactive application slot; it does not buffer the
+whole file in RAM. The installed firmware remains selected if upload or image
+verification fails. Only a successfully verified image changes the boot slot.
+
+### Build and share a binary
+
+1. From the repository, run `pio run`.
+2. Find the finished image at
+   `.pio/build/waveshare_general_driver/firmware.bin`.
+3. Rename a copy to include the version or commit if desired, while keeping the
+   `.bin` extension.
+4. Share it through a trusted private channel. A binary contains the configured
+   SoftAP and OTA credentials, so anyone receiving it must protect it like a
+   password.
+
+The firmware page and dashboard show version `1.1.0`, build time, and the Git
+commit embedded during compilation. Use these values to confirm the expected
+build after reboot.
+
+### Update instructions for an operator
+
+1. Keep the controller on stable power. Make sure the motor says **STOPPED**;
+   use the physical power cutoff if there is any doubt about the mechanism.
+2. Join the `Downhill-Dispatcher` Wi-Fi network. It intentionally has no
+   internet connection.
+3. Open `http://192.168.4.1/`, scroll to **Firmware / System**, and choose
+   **Open firmware updater**.
+4. Enter the separate firmware-administrator username and password when the
+   browser asks. The normal motor dashboard does not require these credentials.
+5. Select the trusted `.bin` file, choose **Upload and install**, and confirm.
+6. Do not close the page or remove power while progress is moving. The motor is
+   locked off throughout the update.
+7. After the success message, wait about 10 seconds, reconnect to the SoftAP if
+   needed, and reload the dashboard.
+8. Confirm the expected firmware version or Git commit and verify the state is
+   **STOPPED**. The motor never resumes automatically.
+
+An upload is refused if the motor is running, the file is not a `.bin`, the
+image exceeds the inactive OTA slot, authentication fails, or the request did
+not originate from the device's own authenticated update page. Update errors
+are reported without rebooting.
+
+### Recovery after an interrupted or failed update
+
+- Keep power on until the page reports an error or the connection timeout has
+  elapsed. The current firmware remains installed because the new slot is not
+  selected until verification succeeds.
+- Reconnect to `Downhill-Dispatcher`, reload the dashboard, confirm the motor is
+  stopped, and retry with the correct binary.
+- If the device rebooted, verify the displayed version. A failed image should
+  still show the previous version.
+- If the SoftAP or dashboard no longer appears after a power cycle, switch off
+  the external motor supply and repeat the initial USB installation procedure.
+  USB flashing is the recovery path for a corrupt or incompatible image.
+
+### OTA security model
+
+The SoftAP's WPA2 password controls network access. Firmware administration
+then uses separate HTTP Basic credentials, same-origin validation, a required
+custom confirmation header, and frame blocking. Both `/update` and
+`/api/update` require administrator authentication. Credentials are compiled
+from gitignored `include/Secrets.h`; there are no default working OTA
+credentials.
+
+HTTP itself is not TLS-encrypted. Use OTA only on the controller's private
+SoftAP, with trusted nearby operators, unique passwords, and no bridged or
+shared network. SoftAP-only mode has no upstream internet route, cloud service,
+or automatic downloader, so a person must join the local Wi-Fi and upload a
+file directly. This is why the device cannot be updated remotely over the
+internet in its present configuration.
+
+## GitHub Actions firmware artifact
+
+`.github/workflows/firmware.yml` builds on pushes to `main` and manual workflow
+runs. Before using it, configure the repository's Actions secrets
+`AP_PASSWORD`, `OTA_USERNAME`, and `OTA_PASSWORD`. The workflow validates that
+the passwords meet the firmware rules, creates the ignored `Secrets.h` only on
+the runner, runs `pio run`, and retains `firmware.bin` as a downloadable
+artifact for 30 days. Access to the repository artifact should be limited
+because the compiled binary contains those device credentials.
 
 ## Connect from an iPhone or Mac
 
@@ -170,6 +267,15 @@ serial and web operation remain available while the ANO is absent. Physical
 restart then requires a fresh SELECT press. SELECT held during boot or
 reconnection must first be released and cannot start the motor.
 
+Firmware upload adds a fourth `UPDATE` ownership state. Its lock is enforced
+inside the shared control coordinator, so physical SELECT, serial `START`, and
+web run requests all use the same denial path. Starting an upload requires an
+already stopped motor; the firmware then stops it defensively, revokes any web
+lease, and retains the lock until failure cleanup or reboot. STOP commands
+remain unconditional. Speed and direction changes are ignored while locked.
+After either a failed update or a successful reboot, the motor remains stopped
+and requires a new deliberate START action.
+
 The built-in, loop-serviced `WebServer` keeps request handlers short and does no
 blocking network waits. Useful endpoints are:
 
@@ -182,6 +288,8 @@ blocking network waits. Useful endpoints are:
 | `/api/run?active=1&id=...` | POST | Deliberately create a run lease |
 | `/api/heartbeat` | POST | Maintain an existing run lease |
 | `/api/stop` | POST | Unconditional stop |
+| `/update` | GET | Authenticated firmware-administration page |
+| `/api/update` | POST | Authenticated, same-origin streaming firmware upload |
 
 ## Staged hardware validation
 
@@ -219,6 +327,32 @@ No physical validation is claimed until these checks are completed and recorded.
 - Confirm dashboard synchronization throughout. Record voltage, current, RPM,
   direction, fault-detection latency, and all unexpected behavior.
 
+### Stage C: OTA validation
+
+Perform Stage C first with the auger mechanically disconnected or the motor
+supply switched off. No hardware validation is claimed by this repository.
+
+- Request `/update` without credentials and with incorrect credentials; confirm
+  both the page and upload endpoint reject access.
+- From a different web origin, attempt a form POST to `/api/update`; confirm the
+  same-origin and confirmation-header checks reject it.
+- Start the motor at low risk, attempt an authenticated update, and confirm the
+  update is rejected and the motor is stopped. Confirm no flash/reboot occurs.
+- With the motor stopped, upload a known-good build. During upload, attempt
+  physical, serial, and web START commands and confirm all are rejected while
+  STOP continues to work.
+- Confirm progress reaches 100%, the device reboots only after verification,
+  the expected version/commit appears, and startup remains STOPPED.
+- Interrupt a second upload by disabling Wi-Fi or closing the browser. Keep
+  device power on, reconnect, and confirm the previous known-good firmware still
+  boots and the motor never starts.
+- Upload a non-firmware `.bin`, a truncated image, an oversized image, and a
+  renamed non-`.bin` file one at a time. Confirm each fails without selecting a
+  new boot image or automatically starting the motor.
+- Finally repeat a successful update with the motor connected but unloaded,
+  physical power cutoff accessible, and all serial/dashboard safety checks
+  observed.
+
 ## Implementation layout
 
 - `include/BoardConfig.h`: verified GPIOs and tunable constants
@@ -228,7 +362,10 @@ No physical validation is claimed until these checks are completed and recorded.
 - `src/Encoder.cpp`: signed pulse counting and RPM calculation
 - `src/SerialConsole.cpp`: command parsing and diagnostics
 - `src/RemoteControl.cpp`: SoftAP, HTTP API, and 500 ms remote lease
+- `src/OTAUpdate.cpp`: authenticated streaming OTA and update-state handling
 - `src/WebDashboard.cpp`: embedded responsive dashboard
+- `include/FirmwareInfo.h`: displayed version, Git commit, and build metadata
+- `scripts/firmware_version.py`: build-time Git commit injection
 - `src/main.cpp`: minimal application wiring
 
 Encoder RPM assumes Waveshare's published 1050 PPR output-shaft value while

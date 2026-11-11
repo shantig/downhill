@@ -15,11 +15,13 @@ const char* ControlCoordinator::sourceName() const {
     case Source::Physical: return "PHYSICAL";
     case Source::Web: return "WEB";
     case Source::Serial: return "SERIAL";
+    case Source::FirmwareUpdate: return "UPDATE";
     default: return "NONE";
   }
 }
 
 void ControlCoordinator::takeOwnership(Source source) {
+  if (firmwareUpdateInProgress_) return;
   if (source_ == source) return;
   motor_.stop();
   Serial.printf("CONTROL: %s -> %s (safe stop)\n", sourceName(),
@@ -30,6 +32,7 @@ void ControlCoordinator::takeOwnership(Source source) {
 }
 
 bool ControlCoordinator::canStart(Source source) const {
+  if (firmwareUpdateInProgress_) return false;
   if (source == Source::Physical) return true;
   return static_cast<int32_t>(millis() - physicalStopGuardUntilMs_) >= 0;
 }
@@ -45,13 +48,14 @@ bool ControlCoordinator::start(Source source) {
 void ControlCoordinator::stop(Source source,
                               const __FlashStringHelper* reason) {
   motor_.stop();
-  if (source_ != source) takeOwnership(source);
+  if (!firmwareUpdateInProgress_ && source_ != source) takeOwnership(source);
   lastActivityMs_ = millis();
   Serial.printf("CONTROL: %s STOP: ", sourceName());
   Serial.println(reason);
 }
 
 void ControlCoordinator::setSpeedPercent(Source source, uint8_t percent) {
+  if (firmwareUpdateInProgress_) return;
   takeOwnership(source);
   lastActivityMs_ = millis();
   motor_.setSpeedPercent(percent);
@@ -59,6 +63,7 @@ void ControlCoordinator::setSpeedPercent(Source source, uint8_t percent) {
 
 void ControlCoordinator::setDirection(
     Source source, MotorController::Direction direction) {
+  if (firmwareUpdateInProgress_) return;
   takeOwnership(source);
   lastActivityMs_ = millis();
   motor_.setDirection(direction);
@@ -79,6 +84,26 @@ void ControlCoordinator::update() {
 void ControlCoordinator::guardPhysicalStop(bool buttonHeld) {
   (void)buttonHeld;
   physicalStopGuardUntilMs_ = millis() + BoardConfig::kPhysicalStopGuardMs;
+}
+
+bool ControlCoordinator::beginFirmwareUpdate() {
+  if (firmwareUpdateInProgress_ || motor_.isRunning()) return false;
+  firmwareUpdateInProgress_ = true;
+  motor_.stop();
+  source_ = Source::FirmwareUpdate;
+  lastActivityMs_ = millis();
+  Serial.println(F("CONTROL: firmware update lock active; motor inhibited"));
+  return true;
+}
+
+void ControlCoordinator::endFirmwareUpdate() {
+  motor_.stop();
+  if (!firmwareUpdateInProgress_) return;
+  firmwareUpdateInProgress_ = false;
+  source_ = Source::None;
+  physicalStopGuardUntilMs_ = millis() + BoardConfig::kPhysicalStopGuardMs;
+  lastActivityMs_ = millis();
+  Serial.println(F("CONTROL: firmware update lock released; motor stopped"));
 }
 
 bool ControlCoordinator::setSerialTimeoutMs(uint32_t timeoutMs) {

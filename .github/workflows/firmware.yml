@@ -1,0 +1,73 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate firmware secrets
+        env:
+          AP_PASSWORD: ${{ secrets.AP_PASSWORD }}
+          OTA_USERNAME: ${{ secrets.OTA_USERNAME }}
+          OTA_PASSWORD: ${{ secrets.OTA_PASSWORD }}
+        run: |
+          python - <<'PY'
+          import os
+          if len(os.environ.get("AP_PASSWORD", "")) < 8:
+              raise SystemExit("AP_PASSWORD repository secret must contain at least 8 characters")
+          if not os.environ.get("OTA_USERNAME", ""):
+              raise SystemExit("OTA_USERNAME repository secret is required")
+          if len(os.environ.get("OTA_PASSWORD", "")) < 12:
+              raise SystemExit("OTA_PASSWORD repository secret must contain at least 12 characters")
+          if os.environ["OTA_PASSWORD"] == os.environ["AP_PASSWORD"]:
+              raise SystemExit("OTA_PASSWORD must differ from AP_PASSWORD")
+          PY
+
+      - name: Create private firmware configuration
+        env:
+          AP_PASSWORD: ${{ secrets.AP_PASSWORD }}
+          OTA_USERNAME: ${{ secrets.OTA_USERNAME }}
+          OTA_PASSWORD: ${{ secrets.OTA_PASSWORD }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          values = {
+              "kApSsid": "Downhill-Dispatcher",
+              "kApPassword": os.environ["AP_PASSWORD"],
+              "kOtaUsername": os.environ["OTA_USERNAME"],
+              "kOtaPassword": os.environ["OTA_PASSWORD"],
+          }
+          lines = ["#pragma once", "", "namespace Secrets {"]
+          lines.extend(f"constexpr char {name}[] = {json.dumps(value)};" for name, value in values.items())
+          lines.append("}  // namespace Secrets")
+          Path("include/Secrets.h").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.18
+
+      - name: Build firmware
+        run: pio run
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: downhill-dispatcher-${{ github.sha }}
+          path: .pio/build/waveshare_general_driver/firmware.bin
+          if-no-files-found: error
+          retention-days: 30

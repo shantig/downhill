@@ -6,7 +6,7 @@
 
 class ControlCoordinator {
  public:
-  enum class Source : uint8_t { None, Physical, Web, Serial };
+  enum class Source : uint8_t { None, Physical, Web, Serial, FirmwareUpdate };
 
   explicit ControlCoordinator(MotorController& motor) : motor_(motor) {}
 
@@ -18,10 +18,13 @@ class ControlCoordinator {
   void activity(Source source);
   void update();
   void guardPhysicalStop(bool buttonHeld);
+  bool beginFirmwareUpdate();
+  void endFirmwareUpdate();
 
   Source source() const { return source_; }
   const char* sourceName() const;
   bool canStart(Source source) const;
+  bool firmwareUpdateInProgress() const { return firmwareUpdateInProgress_; }
   uint32_t serialTimeoutMs() const { return serialTimeoutMs_; }
   bool setSerialTimeoutMs(uint32_t timeoutMs);
 
@@ -33,4 +36,5 @@ class ControlCoordinator {
   uint32_t lastActivityMs_ = 0;
   uint32_t serialTimeoutMs_ = 0;
   uint32_t physicalStopGuardUntilMs_ = 0;
+  bool firmwareUpdateInProgress_ = false;
 };

@@ -37,7 +37,7 @@ void SerialConsole::execute(String command) {
       return;
     }
     if (!control_.start(ControlCoordinator::Source::Serial)) {
-      Serial.println(F("ERR START blocked by physical STOP guard"));
+      Serial.println(F("ERR START blocked by safety guard or firmware update"));
       return;
     }
     acknowledge();
@@ -81,7 +81,7 @@ void SerialConsole::execute(String command) {
 }
 
 void SerialConsole::printStatus() const {
-  Serial.printf("state=%s direction=%s speed=%u%% rpm=%.1f count=%ld source=%s timeout=%lums\n",
+  Serial.printf("state=%s direction=%s speed=%u%% rpm=%.1f count=%ld source=%s timeout=%lums update=%s\n",
                 motor_.isRunning() ? "RUNNING" : "STOPPED",
                 motor_.direction() == MotorController::Direction::Forward
                     ? "FORWARD"
@@ -89,7 +89,8 @@ void SerialConsole::printStatus() const {
                 motor_.speedPercent(), encoder_.rpm(),
                 static_cast<long>(encoder_.count()),
                 control_.sourceName(),
-                static_cast<unsigned long>(control_.serialTimeoutMs()));
+                static_cast<unsigned long>(control_.serialTimeoutMs()),
+                control_.firmwareUpdateInProgress() ? "ACTIVE" : "IDLE");
 }
 
 void SerialConsole::printHelp() const {

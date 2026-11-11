@@ -6,6 +6,7 @@
 #include "Encoder.h"
 #include "ControlCoordinator.h"
 #include "MotorController.h"
+#include "OTAUpdate.h"
 #include "RotaryControl.h"
 #include "SerialConsole.h"
 
@@ -14,7 +15,7 @@ class RemoteControl {
   RemoteControl(MotorController& motor, Encoder& encoder,
                 ControlCoordinator& control, RotaryControl& rotary)
       : motor_(motor), encoder_(encoder), control_(control), rotary_(rotary),
-        server_(80) {}
+        server_(80), ota_(server_, motor_, control_) {}
 
   void begin();
   void update();
@@ -30,6 +31,7 @@ class RemoteControl {
   void handleHeartbeat();
   void handleStop();
   void stopRemote(const __FlashStringHelper* reason);
+  void revokeRemoteLeaseForUpdate();
   void sendJson(int statusCode, const String& body);
   bool requireArgument(const char* name);
   bool acceptRunCommandId();
@@ -40,6 +42,7 @@ class RemoteControl {
   ControlCoordinator& control_;
   RotaryControl& rotary_;
   WebServer server_;
+  OTAUpdate ota_;
   bool remoteLeaseActive_ = false;
   uint32_t lastHeartbeatMs_ = 0;
   uint32_t remoteStops_ = 0;
