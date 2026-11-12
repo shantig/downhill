@@ -1,446 +1,244 @@
 # Downhill Dispatcher
 
-PlatformIO firmware for safely commissioning and locally controlling one Waveshare
-`DCGM-N20-12V-EN-200RPM` motor on Motor A of the Waveshare General Driver for
-Robots.
+Firmware for safely controlling one Waveshare `DCGM-N20-12V-EN-200RPM` motor
+on Motor A of the Waveshare General Driver for Robots.
 
-2026-11-12: OTA Firmware updated (v1.1.0 4d8e93db2410)
+> **Latest recorded OTA update:** 2026-11-12 — v1.1.0 (`4d8e93db2410`). Keep
+> the physical power cutoff within reach whenever operating the motor.
 
-## Verified hardware facts
+## Operate the motor
 
-Sources checked on 2026-11-05:
+1. Secure the motor or auger and keep people clear of moving parts.
+2. Set the bench supply to **12.0 V** with a **1.0 A** current limit.
+3. Join the Wi-Fi network **Downhill-Dispatcher**.
+4. Open <http://192.168.4.1/> and confirm the dashboard shows **STOPPED**.
+5. Choose a direction and speed, then press and hold the large run control.
+   Releasing it, leaving the page, or losing the connection stops the motor.
+6. Use the board power switch as the emergency cutoff.
 
-- [Waveshare General Driver product page](https://www.waveshare.com/general-driver-for-robots.htm): ESP32-WROOM-32UE, TB6612FNG motor driver, encoder-capable Motor A/B ports, DC 7–13 V input.
-- [Waveshare official firmware](https://github.com/waveshareteam/ugv_base_general/blob/main/General_Driver/ugv_config.h): Motor A is PWMA GPIO 25, AIN1 GPIO 21, AIN2 GPIO 17, AENCA GPIO 35, AENCB GPIO 34. Waveshare's positive Motor A convention is AIN1 low / AIN2 high.
-- [Waveshare official firmware I2C configuration](https://github.com/waveshareteam/ugv_base_general/blob/main/General_Driver/ugv_config.h): SDA is GPIO 32 and SCL is GPIO 33.
-- [Adafruit ANO Arduino guide](https://learn.adafruit.com/adafruit-ano-rotary-navigation-encoder-to-i2c-stemma-qt-adapter/arduino): seesaw address `0x49`, product ID 5740, SELECT/UP/LEFT/DOWN/RIGHT pins 1/2/3/4/5, and active-low buttons with seesaw pull-ups.
-- [Waveshare motor product page](https://www.waveshare.com/dcgm-n20-12v-en-200rpm.htm): 12 V, 200 rpm no-load, <=0.1 A no-load, <=1.1 A locked-rotor, 150:1 reduction, AB Hall encoder, 7 PPR motor-side / 1050 PPR output-side, encoder accepts 3.3 V or 5 V.
+The motor always boots stopped and never resumes automatically. Changing
+direction also stops it and requires a new start action.
 
-The bench supply's observed 0.033 A idle draw is recorded as a baseline, not a
-pass/fail result. A 1 A current limit is slightly below the motor's published
-maximum locked-rotor current (1.1 A), which is useful protection but may trip
-under startup or auger load.
+### Physical ANO controller
 
-GPIO 32/33 are the General Driver's published I2C bus and do not conflict with
-Motor A or its encoder. Motor B uses GPIO 22/23/26/16/27, so the earlier plan to
-use GPIO 26/27 for a bare encoder has been removed. The ANO adapter wiring and
-disconnect behavior have not yet been bench-tested on the Rev1.2 board.
+- Turn the knob: change speed by 5% per step.
+- Short-press **SELECT**: start or stop.
+- Double-press **SELECT**: stop and reverse direction.
+- Hold **SELECT** for at least one second: stop and reset speed to 60%.
+
+If the ANO controller disconnects while it owns a running motor, the firmware
+stops the motor. A fresh press is required after reconnection.
 
 ## First installation over USB
 
-The easiest installation uses [ESPHome Web](https://web.esphome.io/) and the
-private `downhill-factory.bin` GitHub Actions artifact. This factory image is a
-complete image for offset `0x0`; do not use the OTA-only `firmware.bin` for a
-blank board.
+Use the private `downhill-factory.bin` build artifact. It is a complete image
+for offset `0x0`; `firmware.bin` is only for later browser updates.
 
-### Install with ESPHome Web (beginner method)
+1. In GitHub **Actions**, open a successful **Build firmware** run. Download
+   and unzip the `downhill-dispatcher-<commit>` artifact.
+2. Switch off the external 12 V motor supply.
+3. Connect the board's ESP32 USB-C port—not the LIDAR port—with a data cable.
+4. Open [ESPHome Web](https://web.esphome.io/) in Chrome or Edge.
+5. Select **Connect**, choose the CP2102 serial device, then select **Install**.
+6. Choose `downhill-factory.bin` and wait for installation to finish.
+7. Join **Downhill-Dispatcher**, open <http://192.168.4.1/>, and verify
+   **STOPPED** before restoring motor power.
 
-1. On the repository's **Actions** page, open a successful **Build firmware**
-   run. Sign in to GitHub if asked, download its
-   `downhill-dispatcher-<commit>` artifact, and unzip it. Artifacts are private
-   to people who can access the repository; never copy these credential-bearing
-   binaries to a public release or unauthenticated download.
-2. Switch off the external 12 V motor supply. Leave it off throughout flashing
-   so the mechanism cannot move. Connect the board's USB Type-C port used for
-   ESP32 communication, not the LIDAR Type-C port, with a data-capable cable.
-3. Open [ESPHome Web](https://web.esphome.io/) in current Chrome or Edge. It
-   requires a secure browser context and Web Serial support.
-4. Choose **Connect**. In the browser's serial-device picker, select the entry
-   named **CP2102 USB to UART Bridge Controller** (it may instead show a COM or
-   `/dev/ttyUSB` name), then choose **Connect**. Do not select an unrelated
-   serial device.
-5. Choose **Install**, select the unzipped `downhill-factory.bin`, and confirm.
-   Keep the page open, USB cable connected, and computer awake until ESPHome
-   Web reports completion. The merged file is already based at offset `0x0`.
-6. If the device is not listed, try a known data cable and another USB port,
-   then install the computer's CP210x/CP2102 driver if needed. If flashing does
-   not start, place the board in download mode using the Waveshare download
-   button procedure and retry.
-7. After the board restarts, join the WPA2 network `Downhill-Dispatcher` using
-   the configured SoftAP password and open `http://192.168.4.1/`.
-8. Verify the dashboard loads, the expected version or Git commit is shown,
-   and motor state is **STOPPED** before restoring motor power. Initial flashing
-   has not been validated on physical hardware by this repository.
+If the board is not listed, try another data cable or USB port and install the
+CP210x driver if needed. If flashing will not start, put the board in download
+mode using Waveshare's download-button procedure and retry.
 
-### Build and install locally with PlatformIO
+The binaries contain Wi-Fi and administrator credentials. Keep artifacts
+private; do not publish them in a release or unauthenticated download.
 
-1. Install [VS Code](https://code.visualstudio.com/) and the PlatformIO
-   extension, or PlatformIO Core.
-2. Copy `include/Secrets.example.h` to `include/Secrets.h`. Set a unique SoftAP
-   password and separate firmware-administrator username and password as
-   described below.
-3. Connect the board's ESP32 USB Type-C port and leave the external 12 V motor
-   supply switched off.
-4. Run `pio run`. The OTA image is
-   `.pio/build/waveshare_general_driver/firmware.bin`.
-5. Run `pio run --target idedata`, then
-   `python scripts/build_factory_image.py` to create and validate
-   `.pio/build/waveshare_general_driver/downhill-factory.bin`, or run
-   `pio run --target upload` to flash directly with PlatformIO.
-6. Open `pio device monitor --baud 115200` and reset the board. It must report
-   `motor is SAFE/STOPPED` and must not report that OTA credentials are
-   unconfigured.
-7. If automatic upload does not begin, follow the Waveshare board's
-   download-button procedure, then retry.
+## Browser firmware update
 
-PlatformIO uses the generic `esp32dev` definition because the controller is an
-ESP32-WROOM-32UE and Waveshare does not publish a dedicated PlatformIO board
-manifest. The environment is pinned for reproducibility and resolves to
-Arduino-ESP32 2.0.17. The official Adafruit seesaw library is pinned to 1.7.9;
-its dependencies are resolved by PlatformIO.
+Use only `firmware.bin` built for this project and board.
 
-The generic ESP32 board definition uses DIO flash mode at 40 MHz and Arduino's
-standard 4 MB partition
-layout. It provides two 1,310,720-byte application slots (`app0` and `app1`)
-and an OTA metadata partition. The firmware can therefore be installed over
-USB once and updated between slots afterward; no partition migration is
-required. The build reports the exact image use and fails if it outgrows a
-slot.
+1. Confirm the dashboard shows **STOPPED** and keep the controller on stable
+   power.
+2. Join **Downhill-Dispatcher** and open <http://192.168.4.1/>.
+3. Under **Firmware / System**, select **Open firmware updater**.
+4. Enter the firmware-administrator credentials.
+5. Choose `firmware.bin`, then select **Upload and install**.
+6. Keep the page open and power connected until the upload succeeds.
+7. Wait about 10 seconds, reconnect if necessary, and verify the displayed
+   version or commit and the **STOPPED** state.
 
-The factory-image script reads the paths and offsets emitted by the current
-PlatformIO build instead of inventing a second layout. It requires and verifies
-the current ESP32 layout: bootloader at `0x1000`, partition table at `0x8000`,
-`boot_app0.bin` at `0xE000`, and application at `0x10000`. It also checks the
-board manifest and bootloader header agree on DIO, 40 MHz, and 4 MB, asks
-Espressif esptool to validate both executable images, verifies every merged
-payload at its expected offset, enforces the 4 MB boundary, and prints the
-factory image's SHA-256 digest.
+The motor is locked off during an update. A failed upload leaves the current
+firmware selected. If the dashboard does not return after a power cycle,
+switch off motor power and repeat the USB installation.
 
-## Configure the private SoftAP
-
-The firmware creates a WPA2-protected access point named
-`Downhill-Dispatcher`; it does not need an internet connection or router.
-
-1. Copy `include/Secrets.example.h` to `include/Secrets.h`.
-2. Replace `kApPassword` with a unique password of at least eight characters.
-3. Set `kOtaUsername` and a unique `kOtaPassword` of at least 12 characters.
-   The OTA password must differ from the SoftAP password. Browser updating is
-   disabled while the example placeholder remains.
-4. Do not force-add `include/Secrets.h`: it is excluded by `.gitignore` so the
-   credential cannot be committed accidentally.
-
-A local `include/Secrets.h` is already present in this workspace for builds,
-but all placeholder passwords must be changed before operating the motor or
-using OTA.
-
-## Subsequent browser firmware updates
-
-Compile and install only binaries built for this exact project and board. OTA
-streams the image into the inactive application slot; it does not buffer the
-whole file in RAM. The installed firmware remains selected if upload or image
-verification fails. Only a successfully verified image changes the boot slot.
-
-### Build and share a binary
-
-1. From the repository, run `pio run`.
-2. Find the finished image at
-   `.pio/build/waveshare_general_driver/firmware.bin`.
-3. Rename a copy to include the version or commit if desired, while keeping the
-   `.bin` extension.
-4. Share it through a trusted private channel. A binary contains the configured
-   SoftAP and OTA credentials, so anyone receiving it must protect it like a
-   password.
-
-The firmware page and dashboard show version `1.1.0`, build time, and the Git
-commit embedded during compilation. Use these values to confirm the expected
-build after reboot.
-
-### Update instructions for an operator
-
-1. Keep the controller on stable power. Make sure the motor says **STOPPED**;
-   use the physical power cutoff if there is any doubt about the mechanism.
-2. Join the `Downhill-Dispatcher` Wi-Fi network. It intentionally has no
-   internet connection.
-3. Open `http://192.168.4.1/`, scroll to **Firmware / System**, and choose
-   **Open firmware updater**.
-4. Enter the separate firmware-administrator username and password when the
-   browser asks. The normal motor dashboard does not require these credentials.
-5. Select the trusted `.bin` file, choose **Upload and install**, and confirm.
-6. Do not close the page or remove power while progress is moving. The motor is
-   locked off throughout the update.
-7. After the success message, wait about 10 seconds, reconnect to the SoftAP if
-   needed, and reload the dashboard.
-8. Confirm the expected firmware version or Git commit and verify the state is
-   **STOPPED**. The motor never resumes automatically.
-
-An upload is refused if the motor is running, the file is not a `.bin`, the
-image exceeds the inactive OTA slot, authentication fails, or the request did
-not originate from the device's own authenticated update page. Update errors
-are reported without rebooting.
-
-### Recovery after an interrupted or failed update
-
-- Keep power on until the page reports an error or the connection timeout has
-  elapsed. The current firmware remains installed because the new slot is not
-  selected until verification succeeds.
-- Reconnect to `Downhill-Dispatcher`, reload the dashboard, confirm the motor is
-  stopped, and retry with the correct binary.
-- If the device rebooted, verify the displayed version. A failed image should
-  still show the previous version.
-- If the SoftAP or dashboard no longer appears after a power cycle, switch off
-  the external motor supply and repeat the initial USB installation procedure.
-  USB flashing is the recovery path for a corrupt or incompatible image.
-
-### OTA security model
-
-The SoftAP's WPA2 password controls network access. Firmware administration
-then uses separate HTTP Basic credentials, same-origin validation, a required
-custom confirmation header, and frame blocking. Both `/update` and
-`/api/update` require administrator authentication. Credentials are compiled
-from gitignored `include/Secrets.h`; there are no default working OTA
-credentials.
-
-HTTP itself is not TLS-encrypted. Use OTA only on the controller's private
-SoftAP, with trusted nearby operators, unique passwords, and no bridged or
-shared network. SoftAP-only mode has no upstream internet route, cloud service,
-or automatic downloader, so a person must join the local Wi-Fi and upload a
-file directly. This is why the device cannot be updated remotely over the
-internet in its present configuration.
-
-## GitHub Actions firmware artifacts
-
-`.github/workflows/firmware.yml` builds on pushes to `main` and manual workflow
-runs. Before using it, configure the repository's Actions secrets
-`AP_PASSWORD`, `OTA_USERNAME`, and `OTA_PASSWORD`. The workflow validates that
-the passwords meet the firmware rules, creates the ignored `Secrets.h` only on
-the runner, runs `pio run`, derives the exact PlatformIO flash layout, and uses
-Espressif esptool to create the merged image. One private artifact is retained
-for 30 days and contains exactly these installable files:
-
-- `downhill-factory.bin`: merged 4 MB-layout image for ESPHome Web or another
-  flasher writing at offset `0x0`; use this for initial USB installation and
-  USB recovery.
-- `firmware.bin`: application-only image for the authenticated browser OTA page;
-  do not use it as a blank-board factory image.
-
-Repository workflow artifacts require authorized GitHub access, but anyone who
-downloads either binary can extract or reuse its compiled credentials. Limit
-artifact access, share only through a trusted private channel, and never attach
-the files to a public GitHub Release or unauthenticated website.
-
-## Connect from an iPhone or Mac
-
-1. Flash the firmware over the board's ESP32 USB Type-C port with the 12 V motor
-   supply switched off.
-2. Open the serial monitor at 115200 baud. Confirm `motor is SAFE/STOPPED` and
-   note the printed dashboard address (normally `http://192.168.4.1/`).
-3. On iPhone, open **Settings > Wi-Fi**; on Mac, open the Wi-Fi menu. Join
-   `Downhill-Dispatcher` with the password from `include/Secrets.h`.
-4. The device may report that this network has no internet. Stay connected and
-   browse to `http://192.168.4.1/` in Safari.
-5. Confirm the dashboard says `Connected` and `STOPPED`. Joining Wi-Fi or
-   reopening the page never starts the motor.
-
-Only devices possessing the SoftAP password can reach the dashboard. HTTP is
-local and unencrypted, so use a unique password and do not share the motor's
-network while operating it.
+OTA is available only on the device's local SoftAP. HTTP is not TLS-encrypted,
+so use unique passwords and allow only trusted nearby operators.
 
 ## Wiring and power
 
-1. Switch the bench output and the board power switch off.
-2. Plug the motor's keyed 6-pin connector directly into the board's **Motor A 6P encoder** port. Do not use Motor B or either 2-pin non-encoder port.
-3. Connect the bench supply to the board's XH2.54 power input with correct polarity: 12.0 V, initially limited to 1.0 A. Verify polarity with a meter before enabling output.
-4. Keep USB connected for serial control. Do not separately wire encoder signals when using the keyed 6-pin cable.
-5. Secure the unloaded motor so its shaft and cable cannot catch anything. For the auger test, add a guard and mechanically support the motor/auger assembly.
+With all power off:
 
-The encoder pins GPIO 34/35 cannot provide internal pull-ups. The specified
-motor encoder contains pull-ups and the board's matched 6-pin connection is the
-intended interface. If using a custom cable, first verify its pinout against
-Waveshare's encoder connector diagram; do not infer wire function by color.
+1. Connect the motor's keyed 6-pin plug to **Motor A 6P encoder**. Do not use
+   Motor B or either 2-pin motor port.
+2. Connect the bench supply to the XH2.54 input with verified polarity. Start
+   at **12.0 V / 1.0 A**.
+3. Secure the unloaded motor. Guard and support the motor/auger assembly before
+   testing under load.
 
-### Adafruit ANO #5001 with #5740 seesaw adapter
+The motor's encoder uses the keyed cable; do not wire its signals separately.
+For a custom cable, verify the pinout from Waveshare documentation rather than
+inferring it from wire colors.
 
-With all power off, wire the separate mechanical encoder as follows:
+### Adafruit ANO #5001 and seesaw #5740
 
-| ANO adapter connection | General Driver connection |
+| ANO adapter | General Driver |
 | --- | --- |
 | VIN | 3.3 V |
-| GND | Common GND |
+| GND | GND |
 | SDA | GPIO 32 / SDA |
 | SCL | GPIO 33 / SCL |
 
-The firmware starts `Wire` on GPIO 32/33 at 100 kHz with a 20 ms transaction
-timeout, probes address `0x49`, verifies product ID 5740, enables seesaw input
-pull-ups, and records the initial absolute encoder position without creating an
-event. Clockwise changes speed +5% per reported step and counterclockwise -5%,
-clamped to 0–100%. SELECT controls START/STOP, double-press direction reversal,
-and long-press reset; the other four buttons currently log press/release
-diagnostics only. The configured
-encoder sign follows the expected ANO mounting but must be confirmed during
-Stage A; if reversed, change `kAnoClockwisePositionSign` rather than rewiring
-the I2C bus.
+The adapter must appear at I2C address `0x49` with product ID 5740. If knob
+direction is reversed, change `kAnoClockwisePositionSign`; do not swap I2C
+wires.
+
+## Build locally
+
+Requirements: VS Code with PlatformIO, or PlatformIO Core.
+
+1. Copy `include/Secrets.example.h` to `include/Secrets.h`.
+2. Set a unique SoftAP password of at least 8 characters.
+3. Set a separate OTA username and password of at least 12 characters.
+4. Build with `pio run`.
+
+Useful commands:
+
+```text
+pio run                                      # build OTA firmware
+pio run --target upload                      # flash through USB
+pio device monitor --baud 115200             # open serial console
+pio run --target idedata
+python scripts/build_factory_image.py        # build factory image
+```
+
+Build outputs:
+
+- `.pio/build/waveshare_general_driver/firmware.bin`: browser OTA image.
+- `.pio/build/waveshare_general_driver/downhill-factory.bin`: full USB image.
+
+`include/Secrets.h` is ignored by Git. Never force-add it. The build uses the
+generic `esp32dev` definition and a pinned Arduino-ESP32 2.0.17 environment.
+The factory-image script validates the flash layout and merged image.
 
 ## Serial commands
 
-Commands are case-insensitive and newline-terminated:
+Commands are case-insensitive and end with a newline.
 
-| Command | Behavior |
+| Command | Action |
 | --- | --- |
-| `SPEED 20` | Set PWM duty to 20%; `0` also stops |
-| `FORWARD` / `FWD` | Select Waveshare-positive direction and stop |
-| `REVERSE` / `REV` | Select reverse direction and stop |
-| `START` | Run at the selected speed/direction |
-| `STOP` | Immediately set PWM to zero and coast |
-| `STATUS` | Print state, direction, duty, measured RPM, count, timeout |
-| `TIMEOUT 3000` | Set command watchdog in ms (500–30000) |
-| `HELP` | Print command summary |
+| `SPEED 20` | Set speed to 20%; zero also stops |
+| `FORWARD` or `FWD` | Stop and select forward |
+| `REVERSE` or `REV` | Stop and select reverse |
+| `START` | Run at the selected speed and direction |
+| `STOP` | Stop immediately and coast |
+| `STATUS` | Show state, direction, speed, RPM, and timeout |
+| `TIMEOUT 3000` | Set watchdog to 500–30000 ms |
+| `HELP` | Show command help |
 
-Startup is always stopped in reverse with a 60% speed preset. A direction change de-energizes Motor A, waits 20 ms,
-changes direction, and requires a separate `START`. While running, no valid
-command for 3 seconds triggers a stop. Reboot, malformed commands, and a zero
-speed never start the motor.
+Startup defaults to reverse at 60%, but remains stopped. While serial control
+is running, three seconds without a valid command triggers a stop.
 
-## Browser control and safety model
+## Safety behavior
 
-The responsive dashboard shows run state, direction, PWM percentage, and live
-encoder RPM. Its large run control must remain pressed. A pointer release,
-cancelled touch, STOP press, hidden browser tab, page exit, offline event, or
-missing heartbeat stops Motor A. The ESP32 enforces the 500 ms timeout; browser
-events are additional early-stop paths.
+- Web control requires a continuous hold and a valid 500 ms heartbeat lease.
+- Serial control uses a configurable watchdog, initially 3000 ms.
+- Physical, web, and serial controls share one motor state. Taking ownership
+  from another control source stops the motor first.
+- STOP is unconditional. Direction changes, zero speed, restart, malformed
+  commands, ANO failure during physical control, and firmware updates cannot
+  start the motor.
+- Firmware updates require a stopped motor and reject all start, speed, and
+  direction requests until failure cleanup or reboot.
+- The physical board power switch is the independent cutoff.
 
-A fresh hold gesture creates a remote-control lease. Heartbeats only extend an
-existing lease and cannot create or restart one. Direction controls end the
-lease and stop the bridge before changing direction. The remote STOP endpoint
-always stops the motor, including motion started over serial. While a remote
-lease is active, its 500 ms watchdog applies. Taking web ownership first safely
-stops serial-owned motion, so the serial watchdog is never suspended or
-extended. The physical board power switch remains the independent cutoff.
-
-Physical, web, and serial commands share the same authoritative motor state.
-The most recent deliberate command owns control (`PHYSICAL`, `WEB`, or
-`SERIAL`), and every ownership change first performs a safe STOP. A physical
-rotation can change a stopped preset or adjust speed while physical control is
-already running; taking control from web or serial stops first. A short press
-stops a running motor immediately; START waits for the 400 ms double-press
-window. A double press stops and reverses direction; a separate short press is
-required to restart. A press held for at least one second stops and resets the
-preset to 60%, with no short-press action on release.
-
-Serial-owned motion retains its configured 3-second command timeout. Web-owned
-motion retains its 500 ms heartbeat lease. Physical control has no software
-keepalive, but taking physical ownership never suspends or lengthens either
-watchdog: it safely stops the previous owner first. A physical STOP cancels a
-web lease. While the button is held, and briefly after a physical STOP, remote
-and serial START requests are rejected. A button held during startup must be
-released before it can create an event, and a long press cannot become a
-short-press restart on release.
-
-The ANO is polled every 10 ms using checked reads. A failed probe, encoder read,
-or button read marks it disconnected; failed data is never interpreted as a
-press. If PHYSICAL owns a running motor, detection of that failure immediately
-commands STOP. The firmware makes a bounded reconnection attempt once per
-second, validates product ID again, and re-baselines position and buttons;
-serial and web operation remain available while the ANO is absent. Physical
-restart then requires a fresh SELECT press. SELECT held during boot or
-reconnection must first be released and cannot start the motor.
-
-Firmware upload adds a fourth `UPDATE` ownership state. Its lock is enforced
-inside the shared control coordinator, so physical SELECT, serial `START`, and
-web run requests all use the same denial path. Starting an upload requires an
-already stopped motor; the firmware then stops it defensively, revokes any web
-lease, and retains the lock until failure cleanup or reboot. STOP commands
-remain unconditional. Speed and direction changes are ignored while locked.
-After either a failed update or a successful reboot, the motor remains stopped
-and requires a new deliberate START action.
-
-The built-in, loop-serviced `WebServer` keeps request handlers short and does no
-blocking network waits. Useful endpoints are:
+The dashboard exposes these local endpoints:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/api/status` | GET | Live motor, encoder, source, ANO, and lease state |
-| `/api/diagnostics` | GET | Uptime, free heap, AP IP, clients, stop count |
-| `/api/speed?value=20` | POST | Set PWM percentage |
+| `/api/status` | GET | Motor, encoder, owner, ANO, and lease state |
+| `/api/diagnostics` | GET | Uptime, heap, network, and stop count |
+| `/api/speed?value=20` | POST | Set speed percentage |
 | `/api/direction?value=forward` | POST | Stop and select direction |
-| `/api/run?active=1&id=...` | POST | Deliberately create a run lease |
-| `/api/heartbeat` | POST | Maintain an existing run lease |
-| `/api/stop` | POST | Unconditional stop |
-| `/update` | GET | Authenticated firmware-administration page |
-| `/api/update` | POST | Authenticated, same-origin streaming firmware upload |
+| `/api/run?active=1&id=...` | POST | Create a web run lease |
+| `/api/heartbeat` | POST | Maintain the lease |
+| `/api/stop` | POST | Stop unconditionally |
+| `/update` | GET | Authenticated updater |
+| `/api/update` | POST | Authenticated firmware upload |
 
-## Staged hardware validation
+## Hardware validation checklist
 
-No physical validation is claimed until these checks are completed and recorded.
+No full physical validation is claimed until these checks are completed and
+recorded.
 
-### Stage A: motor disconnected
+### A. Motor disconnected
 
-- Power by USB with Motor A disconnected. Confirm startup remains STOPPED.
-- Confirm serial reports address `0x49`, product 5740, and an initial position;
-  confirm the dashboard reports ANO connected.
-- Turn both directions and compare position/delta logs. Confirm one 5% change
-  per reported wheel step and the intended clockwise sign.
-- Press and release SELECT, UP, DOWN, LEFT, and RIGHT; confirm each diagnostic.
-- Confirm SELECT short press toggles, double press stops and reverses direction,
-  and a >=1 second press stops and restores 60%, without a short-press action
-  on release.
-- Disconnect SDA, SCL, or the entire cable. Confirm disconnected status and no
-  fabricated button event. Reconnect and confirm product/position revalidation.
-- Reconnect or boot while holding SELECT. Release it and confirm no START; then
-  require a new deliberate press.
-- Exercise serial and web control with the motor disconnected. Confirm the
-  3000 ms serial timeout, 500 ms web heartbeat, ownership transitions, and live
-  dashboard speed/state/source/RPM/ANO updates.
+- Confirm boot state is **STOPPED**.
+- Verify ANO address `0x49`, product 5740, knob direction, 5% steps, and all
+  SELECT gestures.
+- Disconnect and reconnect ANO wiring; confirm no false input or automatic
+  restart.
+- Verify the 3000 ms serial watchdog, 500 ms web lease, and ownership changes.
 
-### Stage B: motor connected
+### B. Motor connected and unloaded
 
-- Begin unloaded at low speed with the physical power cutoff accessible. Verify
-  startup STOPPED, SELECT START/STOP, and live +/-5% speed changes.
-- Start from web control, then press SELECT and confirm physical STOP takes
-  ownership and cancels the web lease.
-- Repeat serial timeout and web heartbeat-loss tests at low speed.
-- While PHYSICAL owns a running motor, interrupt the ANO I2C connection and
-  confirm immediate STOP on detected failure. Reconnect and confirm a fresh
-  SELECT press is required before physical restart.
-- Confirm dashboard synchronization throughout. Record voltage, current, RPM,
-  direction, fault-detection latency, and all unexpected behavior.
+- Begin at low speed with the physical cutoff accessible.
+- Verify physical, browser, and serial start/stop behavior.
+- Take physical control during web operation and confirm an immediate stop.
+- Disconnect the ANO during physical operation and confirm an immediate stop.
+- Record voltage, current, RPM, direction, stop latency, and anomalies.
 
-### Stage C: OTA validation
+### C. Browser update
 
-Perform Stage C first with the auger mechanically disconnected or the motor
-supply switched off. No hardware validation is claimed by this repository.
+Start with motor power off or the auger disconnected.
 
-- Request `/update` without credentials and with incorrect credentials; confirm
-  both the page and upload endpoint reject access.
-- From a different web origin, attempt a form POST to `/api/update`; confirm the
-  same-origin and confirmation-header checks reject it.
-- Start the motor at low risk, attempt an authenticated update, and confirm the
-  update is rejected and the motor is stopped. Confirm no flash/reboot occurs.
-- With the motor stopped, upload a known-good build. During upload, attempt
-  physical, serial, and web START commands and confirm all are rejected while
-  STOP continues to work.
-- Confirm progress reaches 100%, the device reboots only after verification,
-  the expected version/commit appears, and startup remains STOPPED.
-- Interrupt a second upload by disabling Wi-Fi or closing the browser. Keep
-  device power on, reconnect, and confirm the previous known-good firmware still
-  boots and the motor never starts.
-- Upload a non-firmware `.bin`, a truncated image, an oversized image, and a
-  renamed non-`.bin` file one at a time. Confirm each fails without selecting a
-  new boot image or automatically starting the motor.
-- Finally repeat a successful update with the motor connected but unloaded,
-  physical power cutoff accessible, and all serial/dashboard safety checks
-  observed.
+- Verify missing or incorrect credentials and cross-origin uploads are denied.
+- Attempt an update while running; confirm it stops the motor and is rejected.
+- During a valid update, confirm every control source is unable to start it.
+- Verify successful, interrupted, invalid, truncated, and oversized uploads all
+  leave the motor stopped and preserve the previous image when verification
+  fails.
 
-## Implementation layout
+## Hardware reference
 
-- `include/BoardConfig.h`: verified GPIOs and tunable constants
-- `src/MotorController.cpp`: bridge/PWM safety behavior
-- `src/ControlCoordinator.cpp`: authoritative ownership and timeout behavior
-- `src/RotaryControl.cpp`: checked seesaw encoder/button input and reconnect safety
-- `src/Encoder.cpp`: signed pulse counting and RPM calculation
-- `src/SerialConsole.cpp`: command parsing and diagnostics
-- `src/RemoteControl.cpp`: SoftAP, HTTP API, and 500 ms remote lease
-- `src/OTAUpdate.cpp`: authenticated streaming OTA and update-state handling
-- `src/WebDashboard.cpp`: embedded responsive dashboard
-- `include/FirmwareInfo.h`: displayed version, Git commit, and build metadata
-- `scripts/firmware_version.py`: build-time Git commit injection
-- `scripts/build_factory_image.py`: verified esptool factory-image generation
-- `src/main.cpp`: minimal application wiring
+Verified against vendor documentation on 2026-11-05:
 
-Encoder RPM assumes Waveshare's published 1050 PPR output-shaft value while
-counting phase-A rising edges. Compare displayed RPM to an independent tachometer
-during commissioning; adjust the single constant in `BoardConfig.h` only if the
-motor documentation or measured count-per-revolution proves a different edge
-convention.
+- Controller: ESP32-WROOM-32UE, TB6612FNG, 7–13 V input.
+- Motor A: PWMA 25, AIN1 21, AIN2 17, AENCA 35, AENCB 34.
+- I2C: SDA 32, SCL 33.
+- Motor: 12 V, 200 rpm no-load, at most 0.1 A no-load, at most 1.1 A
+  locked-rotor, 150:1 reduction, 1050 PPR output-side encoder.
+- ANO seesaw: address `0x49`, product 5740, buttons on pins 1–5.
 
-ESP-NOW is intentionally left as a future extension; it is not initialized or
-required by this milestone.
+Sources: [Waveshare General Driver](https://www.waveshare.com/general-driver-for-robots.htm),
+[Waveshare firmware](https://github.com/waveshareteam/ugv_base_general/blob/main/General_Driver/ugv_config.h),
+[Waveshare motor](https://www.waveshare.com/dcgm-n20-12v-en-200rpm.htm), and
+[Adafruit ANO guide](https://learn.adafruit.com/adafruit-ano-rotary-navigation-encoder-to-i2c-stemma-qt-adapter/arduino).
+
+The observed 0.033 A idle draw is a baseline, not a pass/fail threshold. The
+1.0 A supply limit is below the published 1.1 A locked-rotor current and may
+trip during startup or under auger load.
+
+## Project layout
+
+- `include/BoardConfig.h`: pins and tunable constants
+- `src/MotorController.cpp`: motor bridge and PWM safety
+- `src/ControlCoordinator.cpp`: ownership and watchdogs
+- `src/RotaryControl.cpp`: ANO input and reconnection safety
+- `src/Encoder.cpp`: pulse counting and RPM
+- `src/SerialConsole.cpp`: serial commands
+- `src/RemoteControl.cpp`: SoftAP, API, and web lease
+- `src/OTAUpdate.cpp`: authenticated streaming updates
+- `src/WebDashboard.cpp`: browser dashboard
+- `src/main.cpp`: application wiring
+
+RPM uses Waveshare's published 1050 PPR output-shaft value while counting phase
+A rising edges. Confirm it with a tachometer before changing the constant in
+`BoardConfig.h`. ESP-NOW is reserved for future work and is not initialized.
