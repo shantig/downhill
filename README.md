@@ -6,19 +6,6 @@ on Motor A of the Waveshare General Driver for Robots.
 > **Latest recorded OTA update:** 2026-11-12 — v1.1.0 (`4d8e93db2410`). Keep
 > the physical power cutoff within reach whenever operating the motor.
 
-## Operate the motor
-
-1. Secure the motor or auger and keep people clear of moving parts.
-2. Set the bench supply to **12.0 V** with a **1.0 A** current limit.
-3. Join the Wi-Fi network **Downhill-Dispatcher**.
-4. Open <http://192.168.4.1/> and confirm the dashboard shows **STOPPED**.
-5. Choose a direction and speed, then press and hold the large run control.
-   Releasing it, leaving the page, or losing the connection stops the motor.
-6. Use the board power switch as the emergency cutoff.
-
-The motor always boots stopped and never resumes automatically. Changing
-direction also stops it and requires a new start action.
-
 ### Physical ANO controller
 
 - Turn the knob: change speed by 5% per step.
