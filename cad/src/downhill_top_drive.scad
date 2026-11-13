@@ -2,7 +2,7 @@
 // Downhill Dispatcher — top drive: N20 shaft coupler + motor mount cap
 // ---------------------------------------------------------------------
 // coupler     : plugs into the upper auger's top socket (19 mm x 30 deep,
-//               25 mm OD collar — from auger.scad v4), flange sits on the
+//               25 mm OD collar — from auger.scad v4/v5), flange sits on the
 //               collar, D-bore takes the N20 3 mm D-shaft (+ M2 set screw).
 //               Crush ribs + CA glue lock it in the round socket.
 // motor_mount : cap over the shell top rim (skirt outside the shell OD, so
@@ -22,9 +22,9 @@ top_socket_h = 30;
 top_od       = 25;
 auger_od     = 110;  // flight OD — flights run right up to z = 0
 
-/* [Shell — from downhill_shell.scad v1] */
+/* [Shell — from downhill_shell.scad v2] */
 tube_id      = 114;  // from auger.scad (measure!)
-shell_od     = 117.2; // shell OD at the top rim
+shell_od     = 116.4; // shell OD at the top rim
 rim_z        = 10;   // shell rim height above the auger top face (shell rim_z)
 
 /* [N20 — verify with calipers] */
@@ -44,7 +44,7 @@ rib_h      = 0.25;   // rib height above nominal 19 mm (crushes on insert)
 cf_t       = 2.0;    // flange on the 25 mm collar
 boss_d     = 10;
 boss_h     = 8;
-shaft_eng  = 8.5;    // shaft engagement in the D-bore
+boss_gap   = 0.5;    // clearance: coupler boss top -> motor hub floor
 d_clear    = 0.1;    // D-bore clearance (0 = tight press)
 set_pilot  = 1.6;    // M2 set screw pilot (onto the D flat)
 
@@ -76,7 +76,8 @@ $fn = 96;
 
 // ------------------------------ derived -------------------------------
 boss_top = cf_t + boss_h;
-face_z   = boss_top + (shaft_len - shaft_eng);   // gearbox face height
+face_z   = boss_top + boss_gap + floor_t;        // gearbox face height (hub floor sits ABOVE the coupler boss)
+shaft_eng = shaft_len - (face_z - boss_top);      // D-bore engagement (6.5 mm)
 floor_z0 = face_z - floor_t;
 pw = motor_w + 2*pocket_clr;  pd = motor_d + 2*pocket_clr;
 hw = pw + 2*hub_wall;         hd = pd + 2*hub_wall;
@@ -87,9 +88,11 @@ rib_z0 = max(flight_clear, min(floor_z0, rim_z + flange_t - spoke_min_h));
 rib_z1 = max(face_z, rim_z + flange_t);
 
 assert(floor_z0 >= flight_clear, "hub floor would hit the auger top");
+assert(floor_z0 >= boss_top + 0.3, "hub floor would hit the coupler boss");
+assert(shaft_eng >= 5, "too little shaft in the coupler");
 echo(str("Gearbox face above auger top: ", face_z, " mm;  motor back at ", face_z + body_len,
          " mm (", face_z + body_len - rim_z, " mm above shell rim)"));
-echo(str("Gap coupler boss -> gearbox face: ", face_z - boss_top, " mm"));
+echo(str("Coupler boss -> hub floor gap: ", floor_z0 - boss_top, " mm;  shaft engagement: ", shaft_eng, " mm"));
 
 module hexagon(af, h) cylinder(d=af/cos(30), h=h, $fn=6);
 module d_profile(d, flat) intersection() { circle(d=d, $fn=48); translate([-d, -d]) square([flat + d/2, 2*d]); }

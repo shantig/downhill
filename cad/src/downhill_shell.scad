@@ -1,12 +1,13 @@
 // =====================================================================
-// Downhill Dispatcher — auger shell (v1)
+// Downhill Dispatcher — auger shell (v2: Level 3, 3 dry-fit pieces, lighter)
 // ---------------------------------------------------------------------
-// Houses the auger from auger.scad v4 (110 mm flights, 381 mm long) and
+// Houses the auger from auger.scad v5 (110 mm flights, 635 mm long) and
 // leans back 25 deg on the lean-back frame (downhill_frame.scad).
 //
 // Parts
 //   shell_lower : floor + printed 7 mm pin for the 627 bearing, front
 //                 intake window, joint sleeve on top
+//   shell_middle: plain section (frame collar clamps here)
 //   shell_upper : ball port (top) + dowel slot (below) on the UNDERSIDE,
 //                 spout pad, pod ribs on the UPPER face, rim for the
 //                 top-drive motor cap
@@ -21,24 +22,24 @@
 // CLI: openscad -D 'part="shell_upper"' -o shell_upper.stl downhill_shell.scad
 // =====================================================================
 
-part = "assembly"; // [assembly, shell_lower, shell_upper, boot, spout_ball, spout_dowel, pod]
+part = "assembly"; // [assembly, shell_lower, shell_middle, shell_upper, boot, spout_ball, spout_dowel, pod]
 
-/* [Auger (from auger.scad v4)] */
-auger_len   = 381;
+/* [Auger (from auger.scad v5)] */
+auger_len   = 635;
 auger_od    = 110;
 tube_id     = 114;    // shell bore
 auger_pitch = 63.5;   // total_len / turns
 
 /* [Shell] */
-wall      = 1.6;      // 4 lines @ 0.4 nozzle
+wall      = 1.2;      // 3 lines @ 0.4 nozzle (set wall line width 0.40)
 lean      = 25;       // deg back from vertical
-floor_t   = 3;
+floor_t   = 2.4;
 floor_hole = 6;      // floor lightening holes (< 8 mm dowel)
 rim_z     = 10;       // shell rim above auger top (= rim_z in downhill_top_drive.scad)
-split_z   = 180;      // joint between the two pieces (keeps the frame collar on the upper)
-sleeve_h  = 12;
-sleeve_t  = 2.4;
-sleeve_fit = 0.2;     // radial
+n_pieces  = 3;        // ~217 mm each (X2D: 260 mm Z)
+sleeve_h  = 16;       // dry-fit joints: pack it apart, push together on site
+sleeve_t  = 1.6;
+sleeve_fit = 0.15;    // radial (a wrap of tape if loose)
 
 /* [Bottom pin for the 627 bearing] */
 pin_mode    = "printed"; // [printed, steel]
@@ -68,19 +69,19 @@ pilot_d      = 2.5;   // M3 self-tap pilot
 
 /* [Spouts] */
 spout_len   = 50;
-spout_tilt  = 10;     // extra droop past the 25 deg lean -> 35 deg below horizontal
-spout_wall  = 1.6;
-spout_floor = 2.0;
-flange_t    = 2.4;
+spout_tilt  = -10;    // vs. tube frame: 25 deg lean - 10 = 15 deg below horizontal (dowels roll crosswise)
+spout_wall  = 1.2;
+spout_floor = 1.6;
+flange_t    = 2.0;
 
 /* [Lightening: 6 mm slots on the upper side] */
 lite      = true;
 slot_w    = 6;        // < 8 mm dowel, can't snag
-slot_rib  = 2.5;
+slot_rib  = 2.0;
 row_max   = 48;
 ring_h    = 4;
-lite_a0   = -45;      // arc that gets slots (deg, CCW from +X; +Y = 90)
-lite_a1   = 225;      // underside 270 +/- 45 stays solid
+lite_a0   = -60;      // arc that gets slots (deg, CCW from +X; +Y = 90)
+lite_a1   = 240;      // underside 270 +/- 30 stays solid (track under the exits)
 
 /* [Electronics pod (upper face)] */
 pod_gap    = 4;
@@ -133,13 +134,21 @@ boss_z  = [pod_s + boss_inset, pod_s + plate_l - boss_inset];
 boss_a  = [90 - asin(pod_screw_x/R), 90 + asin(pod_screw_x/R)];
 // frame collar (downhill_frame.scad: collar_frac 0.55, collar_h 18)
 collar_z = 0.55*shell_len;
+// pieces
+splits = [for (i = [1:n_pieces-1]) round(i*shell_len/n_pieces)];
+function pz0(i) = i == 0 ? 0 : splits[i-1];
+function pz1(i) = i == n_pieces - 1 ? shell_len : splits[i];
+function exit_h(z) = z*cos(lean);       // height above floor of an underside point at tube z
 
 echo(str("SHELL: OD ", 2*R, "  length ", shell_len, "  auger ", z_a0, "..", z_a1));
 echo(str("Ball port z ", bp_z0, "..", bp_z1, "   dowel slot centre z ", dow_zc));
 echo(str("Pod z ", pod_s, "..", pod_s + plate_l, "   collar z ", collar_z));
-echo(str("Pieces: lower ", split_z + sleeve_h, " mm, upper ", shell_len - split_z, " mm (X2D: 260)"));
-assert(shell_len - split_z <= 255 && split_z + sleeve_h <= 255, "piece too tall");
-assert(collar_z - 9 > split_z + sleeve_h + 2, "collar lands on the joint sleeve");
+echo(str("Pieces (tall): ", [for (i = [0:n_pieces-1]) pz1(i) - pz0(i) + (i < n_pieces - 1 ? sleeve_h : 0)], "  splits ", splits));
+echo(str("HEIGHT above floor: ball sill ", exit_h(bp_z0), " mm (", exit_h(bp_z0)/25.4, " in), dowel low sill ",
+         exit_h(dow_low), " mm (", exit_h(dow_low)/25.4, " in).  Level 3 rim = 400 mm"));
+for (i = [0:n_pieces-1]) assert(pz1(i) - pz0(i) + sleeve_h <= 255, "piece too tall");
+for (z = splits) assert(collar_z - 11 > z + sleeve_h || collar_z + 11 < z, "collar lands on a joint sleeve");
+assert(pad_z0 - pad_t > splits[n_pieces-2] + sleeve_h + 2, "exits must sit on the top piece");
 
 // ------------------------------ helpers -------------------------------
 function frange(a, b, n) = [for (i = [0:n-1]) a + (b - a)*(i + 0.5)/n];
@@ -183,7 +192,7 @@ module dowel_slot_cut(r_out = R + 1) {
 module intake_cut() rotate([0,0,180]) roof_cut(in_w, in_z0, in_rect_h, in_roof, 1);  // toward +Y
 
 // ------------------------------ lightening ----------------------------
-module lite_row(z0, z1, phase, skip_intake = false) {
+module lite_row(z0, z1, phase, skip_intake = false, skip_pad = false) {
     near_boss = [for (zb = boss_z) if (z1 > zb - boss_D - boss_d && z0 < zb + boss_d) 1] != [];
     bda = (boss_d/2 + slot_rib + slot_w/2)/R*180/PI;
     rm = R - wall/2;
@@ -192,13 +201,14 @@ module lite_row(z0, z1, phase, skip_intake = false) {
     translate([0,0,z0]) linear_extrude(z1 - z0)
         for (i = [0:n - 1 - phase]) let(a = lite_a0 + (i + 0.5 + phase/2)*da)
             if (!(skip_intake && z0 < in_top + 4 && abs(a - 90) < asin((in_w/2)/R) + da) &&
-                !(near_boss && min([for (b = boss_a) abs(a - b)]) < bda))
+                !(near_boss && min([for (b = boss_a) abs(a - b)]) < bda) &&
+                !(skip_pad && z1 > pad_z0 - pad_t - 2 && abs(a - 270) < asin(pad_hw/R) + da))
                 rotate(a) translate([Ri - 1, -slot_w/2]) square([wall + 2, slot_w]);
 }
 
-module lite_cuts(spans, skip_intake = false) {
+module lite_cuts(spans, skip_intake = false, skip_pad = false) {
     rows = [for (s = spans) each rows_in(s[0], s[1])];
-    for (i = [0:len(rows)-1]) lite_row(rows[i][0], rows[i][1], i % 2, skip_intake);
+    for (i = [0:len(rows)-1]) lite_row(rows[i][0], rows[i][1], i % 2, skip_intake, skip_pad);
 }
 
 // ------------------------------ pod bosses ----------------------------
@@ -228,58 +238,55 @@ module pad_pilots(d = pilot_d, depth = pad_t + wall - 1) for (h = pad_holes())
     translate([h[0], -sqrt(pow(R + pad_t, 2) - h[0]*h[0]) - 1, h[1]]) rotate([-90,0,0]) cylinder(d = d, h = depth + 1, $fn = 20);
 
 // ------------------------------ shell pieces --------------------------
-module shell_lower() {
-    difference() {
-        union() {
-            tube(Ri, R, 0, split_z);
-            cylinder(r = R, h = floor_t);
-            // joint sleeve + 45 deg underside
-            tube(R + sleeve_fit, R + sleeve_fit + sleeve_t, split_z - 0.01, split_z + sleeve_h);
-            translate([0,0,split_z - (sleeve_fit + sleeve_t)]) difference() {
-                cylinder(r1 = R - 0.01, r2 = R + sleeve_fit + sleeve_t, h = sleeve_fit + sleeve_t);
-                translate([0,0,-1]) cylinder(r = Ri, h = 10);
-            }
-            // bearing pin
-            translate([0,0,floor_t - 0.01]) cylinder(d = shoulder_d, h = shoulder_h + 0.01, $fn = 48);
-            if (pin_mode == "printed")
-                translate([0,0,floor_t + shoulder_h - 0.01]) {
-                    cylinder(d = pin_d, h = pin_len - 0.6, $fn = 48);
-                    translate([0,0,pin_len - 0.61]) cylinder(d1 = pin_d, d2 = pin_d - 1.2, h = 0.6, $fn = 48);
-                }
-        }
-        if (pin_mode == "steel") translate([0,0,1]) cylinder(d = steel_pin_d, h = floor_t + shoulder_h, $fn = 48);
-        intake_cut();
-        // floor lightening
-        translate([0,0,-1]) linear_extrude(floor_t + 2) intersection() {
-            difference() { circle(r = Ri - 3); circle(r = 14); }
-            for (i = [-8:8], j = [-8:8]) translate([i*(floor_hole + 2.6) + (j%2)*(floor_hole + 2.6)/2, j*(floor_hole + 2.6)*sin(60)]) circle(d = floor_hole, $fn = 6);
-        }
-        // key slot in the sleeve (+Y)
-        translate([-2.3, R - 1, split_z + 1]) cube([4.6, sleeve_t + 3, sleeve_h]);
-        if (lite) lite_cuts([[14, split_z - 4]], skip_intake = true);
-    }
-}
+function cut_band(spans, c0, c1) = [for (sp = spans) each ((c1 <= sp[0] || c0 >= sp[1]) ? [sp] : [[sp[0], c0], [c1, sp[1]]])];
+function lite_spans(i) = cut_band([[i == 0 ? 14 : pz0(i) + sleeve_h + 4, i == n_pieces - 1 ? shell_len - 14 : pz1(i) - 4]],
+                                  collar_z - 11, collar_z + 11);
 
-module shell_upper() {
+module shell_piece(i) {
+    bot = i == 0; top = i == n_pieces - 1;
+    z0 = pz0(i); z1 = pz1(i);
     difference() {
         union() {
-            tube(Ri, R, split_z, shell_len);
-            translate([-2, R - 0.5, split_z + 0.5]) cube([4, 0.5 + sleeve_fit + 1.2, sleeve_h - 1.5]);   // key
-            pod_bosses();
-            spout_pad();
+            tube(Ri, R, z0, z1);
+            if (!top) {   // joint sleeve + 45 deg underside
+                tube(R + sleeve_fit, R + sleeve_fit + sleeve_t, z1 - 0.01, z1 + sleeve_h);
+                translate([0,0,z1 - (sleeve_fit + sleeve_t)]) difference() {
+                    cylinder(r1 = R - 0.01, r2 = R + sleeve_fit + sleeve_t, h = sleeve_fit + sleeve_t);
+                    translate([0,0,-1]) cylinder(r = Ri, h = 10);
+                }
+            }
+            if (!bot) translate([-2, R - 0.5, z0 + 0.5]) cube([4, 0.5 + sleeve_fit + 1.2, sleeve_h - 1.5]);   // key
+            if (bot) {
+                cylinder(r = R, h = floor_t);
+                translate([0,0,floor_t - 0.01]) cylinder(d = shoulder_d, h = shoulder_h + 0.01, $fn = 48);
+                if (pin_mode == "printed")
+                    translate([0,0,floor_t + shoulder_h - 0.01]) {
+                        cylinder(d = pin_d, h = pin_len - 0.6, $fn = 48);
+                        translate([0,0,pin_len - 0.61]) cylinder(d1 = pin_d, d2 = pin_d - 1.2, h = 0.6, $fn = 48);
+                    }
+            }
+            if (top) { pod_bosses(); spout_pad(); }
         }
-        translate([0,0,split_z - 1]) cylinder(r = Ri, h = shell_len + 2);
-        ball_port_cut();
-        dowel_slot_cut(R + pad_t + 1);
-        pad_pilots();
-        if (lite) lite_cuts([
-            [split_z + sleeve_h + 4, collar_z - 9 - 2],
-            [collar_z + 9 + 2, shell_len - 14]]);
+        if (!bot) translate([0,0,z0 - 1]) cylinder(r = Ri, h = z1 - z0 + 2);
+        if (!top) translate([-2.3, R - 1, z1 + 1]) cube([4.6, sleeve_t + 3, sleeve_h]);     // key slot (+Y)
+        if (bot) {
+            if (pin_mode == "steel") translate([0,0,1]) cylinder(d = steel_pin_d, h = floor_t + shoulder_h, $fn = 48);
+            intake_cut();
+            translate([0,0,-1]) linear_extrude(floor_t + 2) intersection() {
+                difference() { circle(r = Ri - 3); circle(r = 14); }
+                for (a = [-8:8], b = [-8:8]) translate([a*(floor_hole + 2.6) + (b%2)*(floor_hole + 2.6)/2, b*(floor_hole + 2.6)*sin(60)]) circle(d = floor_hole, $fn = 6);
+            }
+        }
+        if (top) { ball_port_cut(); dowel_slot_cut(R + pad_t + 1); pad_pilots(); }
+        if (lite) lite_cuts(lite_spans(i), skip_intake = bot, skip_pad = top);
     }
 }
+module shell_lower()  shell_piece(0);
+module shell_middle() shell_piece(1);
+module shell_upper()  shell_piece(n_pieces - 1);
 
 // ------------------------------ boot ----------------------------------
-boot_fit = 0.25; boot_t = 1.6; boot_h = 8; sole_t = 2.4; sole_w = 6;
+boot_fit = 0.25; boot_t = 1.2; boot_h = 8; sole_t = 2.4; sole_w = 6;
 module above_ground(dz = 0) rotate([-lean,0,0]) translate([-500,-500,-R*sin(lean) + dz]) cube(1000);
 module boot() {
     rb = R + boot_fit; ro = rb + boot_t;
@@ -381,8 +388,7 @@ module dummy_electronics() translate([0, pod_y0 + plate_t, pod_s]) {
     color("Black", 0.9)    translate([0, 17.6, ano_zc]) rotate([-90,0,0]) cylinder(d = 31.4, h = 6);
 }
 module shell_assembly() {
-    color("SteelBlue", 0.55) shell_lower();
-    color("LightSteelBlue", 0.55) shell_upper();
+    for (i = [0:n_pieces-1]) color(i % 2 ? "LightSteelBlue" : "SteelBlue", 0.55) shell_piece(i);
     color("Orange") boot();
     color("Orange") { spout(true); spout(false); }
     color("Orange") elec_pod();
@@ -390,12 +396,13 @@ module shell_assembly() {
 }
 
 if (part == "assembly")    shell_assembly();
-if (part == "shell_lower") shell_lower();
-if (part == "shell_upper") translate([0,0,-split_z]) shell_upper();
+if (part == "shell_lower")  shell_piece(0);
+if (part == "shell_middle") translate([0,0,-pz0(1)]) shell_piece(1);
+if (part == "shell_upper")  translate([0,0,-pz0(n_pieces-1)]) shell_piece(n_pieces - 1);
 if (part == "boot")        translate([0,0,R*sin(lean)]) rotate([lean,0,0]) boot();
 if (part == "spout_ball")  spout_print(true);
 if (part == "spout_dowel") spout_print(false);
 if (part == "pod")         rotate([90,0,0]) pod_plate();
 
 // values for other files that `use` this one
-function shell_info() = [z_a0, z_a1, shell_len, R, lean];
+function shell_info() = [z_a0, z_a1, shell_len, R, lean, n_pieces];

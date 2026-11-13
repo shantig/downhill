@@ -1,19 +1,27 @@
-// Auger / Archimedes screw for Downhill Dispatcher  (v4: support-free V-flight, 627 bottom bearing, top coupling socket)
+// Auger / Archimedes screw for Downhill Dispatcher  (v5: Level 3 height, umbrella flight, 3 pieces, lighter)
 // Parametric rebuild of Auger_Archimedes_Screw.f3d
 // Units: mm. Split into two halves to fit Bambu Lab X2D (260 mm Z).
 
 /* [Main] */
 outer_d      = 110;     // flight OD (unchanged from original)
-total_len    = 381;     // 15 in (unchanged)
-turns        = 6;       // pitch 63.5 mm: room for a steep, support-free V
-flight_tilt  = -40;     // >=40 prints without supports. deg: + = umbrella (low at tube wall), - = cup (low at shaft)
+total_len    = 635;     // 10 turns: puts the shell exits above the Level 3 rim (15.75 in)
+turns        = 10;      // pitch 63.5 mm (same as v4)
+flight_tilt  = 40;  // umbrella; print pieces flipped (export does this)     // >=40 prints without supports. deg: + = umbrella (low at tube wall), - = cup (low at shaft)
 tube_id      = 114;     // measure! flight OD should be tube_id - 3..4 mm
 shaft_d      = 20;      // was 25 (-5 mm). Can go down to 10.
 bore_d       = 0;       // no through-rod (screw spins on bottom bearing, driven from top)
-flight_t     = 1.6;     // normal thickness: 4 lines @0.4 nozzle, no infill (original 0.8)
+flight_t     = 1.2;     // normal thickness: 3 lines @0.4 nozzle (v4 was 1.6)
+
+/* [Flight lightening: radial slots, narrower than a dowel (8 mm)] */
+// Radial slots leave continuous ribs running down the flight's slope, so every
+// layer sits on the one below (vertical hex holes left tiny floating slivers).
+flight_holes = false;   // slots/holes in a sloped flight leave small floating fragments; solid prints clean
+slot_w0      = 4.0;     // slot width at the inner end of each ring (widens to <= 5.5)
+slot_rib     = 2.0;     // rib width at the inner end of each ring
+slot_rings   = [[22, 30], [31.5, 43]];   // [r_in, r_out]; solid bands between (outer 12 mm of flight stays solid)
 
 /* [Split joint] */
-pieces       = 2;       // 381 mm > 260 mm build height
+pieces       = 3;       // 635 / 3 = 211.7 mm each (X2D 260 mm Z)
 spigot_d     = 14;      // D-shaped key between halves (needs shaft_d >= 18)
 spigot_flat  = 5;       // flat distance from center -> one orientation only
 spigot_h     = 12;      // longer: glue the joint (no rod now)
@@ -34,7 +42,7 @@ top_socket_d = 19;
 top_socket_h = 30;      // depth of coupling socket
 
 /* [Output] */
-part         = "assembly"; // [assembly, lower, upper]
+part         = "assembly"; // [assembly, lower, middle, upper]
 seg_per_turn = 120;
 
 pitch   = total_len / turns;
@@ -73,6 +81,14 @@ module flight(h, phase_turns = 0) {
     }
 }
 
+module flight_slots() {
+    for (rg = slot_rings) let(ra = rg[0], rb = rg[1], ang = slot_w0/ra*180/PI,
+                               n = floor(2*PI*ra/(slot_w0 + slot_rib)))
+        for (k = [0:n-1]) rotate(k*360/n)
+            polygon([[ra*cos(-ang/2), ra*sin(-ang/2)], [rb*cos(-ang/2), rb*sin(-ang/2)],
+                     [rb*cos(ang/2),  rb*sin(ang/2)],  [ra*cos(ang/2),  ra*sin(ang/2)]]);
+}
+
 module d_shape(d, flat) {
     intersection() { circle(d = d, $fn = 64); translate([-d, -d]) square([d + flat, 2*d]); }
 }
@@ -105,19 +121,31 @@ module piece(idx) {
                 translate([0, 0, h - top_len - (top_od - shaft_d)/2])          // 45 deg flare
                     cylinder(d1 = shaft_d, d2 = top_od, h = (top_od - shaft_d)/2 + 0.01, $fn = 96);
             }
-            if (use_key && !is_top)                      // male key on top
-                translate([0, 0, h - 0.01]) linear_extrude(spigot_h) d_shape(spigot_d, spigot_flat);
+            if (use_key && !is_bottom)                   // male key on the BOTTOM (sticks up when printed flipped)
+                translate([0, 0, -spigot_h + 0.01]) linear_extrude(spigot_h) d_shape(spigot_d, spigot_flat);
         }
+        if (flight_holes)
+            translate([0, 0, -1]) linear_extrude(h + 2) flight_slots();
         if (bore_d > 0)
             translate([0, 0, -1]) cylinder(d = bore_d, h = h + spigot_h + 2, $fn = 48);
         if (is_bottom) bearing_pocket();
-        if (is_top) translate([0, 0, h - top_socket_h]) cylinder(d = top_socket_d, h = top_socket_h + 1, $fn = 96);
-        if (use_key && !is_bottom)                       // female socket on bottom
-            translate([0, 0, -0.01]) linear_extrude(spigot_h + 0.5)
+        if (is_top) translate([0, 0, h - top_socket_h]) {                 // coupler socket, 45 deg end
+            cylinder(d = top_socket_d, h = top_socket_h + 1, $fn = 96);
+            translate([0, 0, -top_socket_d/2 + 0.01]) cylinder(d1 = 0, d2 = top_socket_d, h = top_socket_d/2, $fn = 96);
+        }
+        if (use_key && !is_top) translate([0, 0, h - spigot_h - 0.5]) {     // female socket on TOP, 45 deg end
+            linear_extrude(spigot_h + 1) offset(delta = fit_clear) d_shape(spigot_d, spigot_flat);
+            mirror([0, 0, 1]) linear_extrude(spigot_d/2 + fit_clear, scale = 0)
                 offset(delta = fit_clear) d_shape(spigot_d, spigot_flat);
+        }
     }
 }
 
-if (part == "lower") piece(0);
-else if (part == "upper") piece(pieces - 1);
+// Print parts come out UPSIDE DOWN (top end on the bed). With the umbrella flight
+// that makes the flight grow out from the shaft; upright, its outer edge would
+// print as an unsupported sliver on every layer.
+module print_flip() translate([0, 0, piece_h]) rotate([180, 0, 0]) children();
+if (part == "lower") print_flip() piece(0);
+else if (part == "middle") print_flip() piece(1);
+else if (part == "upper") print_flip() piece(pieces - 1);
 else if (part == "assembly") for (i = [0:pieces-1]) translate([0, 0, i * piece_h]) color(i % 2 ? "SteelBlue" : "Silver") piece(i);
