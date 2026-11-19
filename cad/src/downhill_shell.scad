@@ -1,5 +1,8 @@
 // =====================================================================
-// Downhill Dispatcher — auger shell (v3: stiffer slots — v2 upper failed, ribs flexed and snagged)
+// Downhill Dispatcher — auger shell (v4: v3 stiff slots on ALL pieces + motor-bar rim slots)
+// v3: v2 ribs (2 mm) flexed and snagged/broke -> 4 mm ribs, 24 mm rows, 5 mm rings.
+// v4: rim slots for the drop-in motor bar (downhill_top_bar.scad) built in;
+//     lower + middle re-exported with the v3 slot pattern.
 // ---------------------------------------------------------------------
 // Houses the auger from auger.scad v5 (110 mm flights, 635 mm long) and
 // leans back 25 deg on the lean-back frame (downhill_frame.scad).
@@ -9,8 +12,8 @@
 //                 intake window, joint sleeve on top
 //   shell_middle: plain section (frame collar clamps here)
 //   shell_upper : ball port (top) + dowel slot (below) on the UNDERSIDE,
-//                 spout pad, pod ribs on the UPPER face, rim for the
-//                 top-drive motor cap
+//                 spout pad, pod ribs on the UPPER face, two rim slots
+//                 (±X) for the drop-in motor bar
 //   boot        : wedge foot so the leaning shell sits flat on the floor
 //   spout_ball, spout_dowel : chutes that screw onto the spout pad
 //   pod         : electronics plate (driver board, LiPo, ANO) that screws
@@ -83,6 +86,11 @@ ring_h    = 5;        // v3: was 4
 top_solid = 40;       // v3: no slots in the top 40 mm (pad corners, pod bosses, motor-cap rim)
 lite_a0   = -60;      // arc that gets slots (deg, CCW from +X; +Y = 90)
 lite_a1   = 240;      // underside 270 +/- 30 stays solid (track under the exits)
+
+/* [Motor-bar rim slots (downhill_top_bar.scad)] */
+bar_slots   = true;
+bar_slot_w  = 5.4;    // tenon 5 + 0.2 per side
+bar_slot_z  = 6.8;    // slot floor above the auger top face (bar underside 7 - 0.2)
 
 /* [Electronics pod (upper face)] */
 pod_gap    = 4;
@@ -279,6 +287,8 @@ module shell_piece(i) {
             }
         }
         if (top) { ball_port_cut(); dowel_slot_cut(R + pad_t + 1); pad_pilots(); }
+        if (top && bar_slots) for (sx = [-1,1])                                   // motor-bar rim slots
+            translate([sx > 0 ? Ri - 3 : -R - 3, -bar_slot_w/2, z_a1 + bar_slot_z]) cube([R - Ri + 6, bar_slot_w, rim_z + 5]);
         if (lite) lite_cuts(lite_spans(i), skip_intake = bot, skip_pad = top);
     }
 }

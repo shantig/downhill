@@ -1,13 +1,17 @@
-# Downhill — Level 3 build (v2)
+# Downhill — Level 3 build
+
+**Current versions:** shell v4 · auger v5 · motor bar (top_bar) · coupler v4. See *Revision notes* at the bottom.
 
 All parametric OpenSCAD. Open `downhill_assembly.scad` to see everything together.
 
 | File | What changed from v1 |
 |---|---|
 | `auger.scad` (v5) | 635 mm / 10 turns, 3 pieces of 211.7 mm, **umbrella flight (+40°)**, 1.2 mm solid flights. Key is male on the bottom of each piece; STLs export **upside down** for printing |
-| `downhill_shell.scad` (v2) | 650.8 mm long, 3 dry-fit pieces, 1.2 mm wall, 6 mm slots everywhere except a 60° solid strip on the low side, 15° spouts |
+| `downhill_shell.scad` (v4) | 650.8 mm long, 3 dry-fit pieces, 1.2 mm wall, 6 mm slots with **4 mm ribs, 24 mm rows** (all pieces) except a 60° solid strip on the low side, 15° spouts, **rim slots for the motor bar** |
 | `downhill_frame.scad` | shell 116.4 × 650.8, feet spread to ±150 mm for the taller tower |
-| `downhill_top_drive.scad` | shell_od 116.4. Motor hub floor now sits above the coupler boss (fixes a 1.5 mm clash); motor rides 2 mm higher |
+| `downhill_top_bar.scad` | drop-in motor bar (prints flat, no supports) through two rim slots |
+| `downhill_coupler_v4.scad` | tapered plug + zip-tie collet; the motor shaft drops in with no force |
+| `downhill_top_drive.scad` | legacy ring mount + coupler, superseded by the two files above |
 
 ## Heights (Task 2 box rims: L3 = 15.75" / 400 mm)
 | Exit | At the shell | Spout lip | Clears L3 rim by |
@@ -26,7 +30,7 @@ That's the drop budget for the extension chutes out to the containers. At 12–1
 ## Weight (estimate — weigh the electronics)
 | Group | PLA | Shell parts in PLA Aero |
 |---|---|---|
-| Shell ×3 | ~270 g | ~175 g |
+| Shell ×3 (v4) | ~313 g | ~205 g |
 | Auger ×3 (8% infill) | ~245 g | 245 g (keep PLA) |
 | Boot, spouts, pod, collars, feet, cap, coupler | ~135 g | ~100 g |
 | Rods, screws, electronics (~75 g guess) | ~100 g | ~100 g |
@@ -35,7 +39,7 @@ That's the drop budget for the extension chutes out to the containers. At 12–1
 The hopper and chutes still have to fit in the budget. Bambu Studio's sliced weight is the number to trust.
 
 ## Bambu Studio settings
-**All parts:** PLA, 0.4 nozzle, 0.20 mm layers, **supports OFF**, except motor_mount (see table).
+**All parts:** PLA, 0.4 nozzle, 0.20 mm layers, **supports OFF** (no part needs them now).
 
 **Walls (most important):**
 - Quality → Line width → Outer wall and Inner wall = **0.40**.
@@ -48,8 +52,9 @@ The hopper and chutes still have to fit in the budget. Bambu Studio's sliced wei
 | auger_lower / middle / upper | **as exported: upside down** (top end on the bed, key/hub up). Upright, the umbrella flight's outer edge prints as an unsupported sliver | **8% gyroid** (hollow shaft) | outer brim 8–10 mm |
 | boot | sole down | 15% gyroid | — |
 | spouts | floor down | 15% | — |
-| pod, collars, feet, coupler | as exported | 15% (coupler 100%) | — |
-| **motor_mount** | as exported (skirt down) | 15% | **supports ON for this part only**: tree, *on build plate only* (the spokes and motor hub start 6–10 mm above the bed) |
+| pod, collars, feet | as exported | 15% | — |
+| motor_bar | flat, as exported | 15% | — |
+| coupler_v4 | plug down, as exported | 100% | — |
 
 - **Bridges:** the dowel-slot top (in shell_upper and spout_dowel) is a 70 mm bridge. Keep the default bridge settings. Light sag is harmless.
 - **Elephant foot:** leave the default 0.15 so the sleeve fits stay true.
@@ -78,3 +83,6 @@ N20 lead routing is the same as v1: about 130 mm over the rim to the driver boar
 ## Revision notes
 - Flight lightening holes were removed. Holes or slots cut vertically through a sloped flight leave small floating fragments that Bambu flags. Solid flights slice clean (checked at 0.16, 0.20 and 0.24 mm layers).
 - Motor drive: the N20 is the 200 rpm version. Start the auger at roughly 20–30% speed (about 40–60 rpm).
+- **Shell v3:** the v2 upper's 2 mm ribs flexed into the nozzle, snagged and broke. Ribs went to 4 mm, rows to 24 mm and rings to 5 mm, with no slots in the top 40 mm. Only the upper was printed at v3.
+- **Top drive:** the ring mount was replaced by a drop-in bar (`downhill_top_bar.scad`). The coupler is now v4 with a zip-tie collet.
+- **Shell v4:** the motor-bar rim slots (5.4 mm wide, 3.2 mm deep on ±X) are built in. The lower and middle pieces were re-exported with the v3 slot pattern (the v2 lower's ribs broke). The upper matches the hand-modified `shell_upper_v4.stl` exactly. Cost: about +11 g lower and +13 g middle over v2.
