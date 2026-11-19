@@ -1,5 +1,5 @@
 // =====================================================================
-// Downhill Dispatcher — auger shell (v2: Level 3, 3 dry-fit pieces, lighter)
+// Downhill Dispatcher — auger shell (v3: stiffer slots — v2 upper failed, ribs flexed and snagged)
 // ---------------------------------------------------------------------
 // Houses the auger from auger.scad v5 (110 mm flights, 635 mm long) and
 // leans back 25 deg on the lean-back frame (downhill_frame.scad).
@@ -77,9 +77,10 @@ flange_t    = 2.0;
 /* [Lightening: 6 mm slots on the upper side] */
 lite      = true;
 slot_w    = 6;        // < 8 mm dowel, can't snag
-slot_rib  = 2.0;
-row_max   = 48;
-ring_h    = 4;
+slot_rib  = 4.0;      // v3: was 2.0 (ribs flexed into the nozzle)
+row_max   = 24;       // v3: was 48 (shorter rows = stiffer ribs)
+ring_h    = 5;        // v3: was 4
+top_solid = 40;       // v3: no slots in the top 40 mm (pad corners, pod bosses, motor-cap rim)
 lite_a0   = -60;      // arc that gets slots (deg, CCW from +X; +Y = 90)
 lite_a1   = 240;      // underside 270 +/- 30 stays solid (track under the exits)
 
@@ -239,7 +240,7 @@ module pad_pilots(d = pilot_d, depth = pad_t + wall - 1) for (h = pad_holes())
 
 // ------------------------------ shell pieces --------------------------
 function cut_band(spans, c0, c1) = [for (sp = spans) each ((c1 <= sp[0] || c0 >= sp[1]) ? [sp] : [[sp[0], c0], [c1, sp[1]]])];
-function lite_spans(i) = cut_band([[i == 0 ? 14 : pz0(i) + sleeve_h + 4, i == n_pieces - 1 ? shell_len - 14 : pz1(i) - 4]],
+function lite_spans(i) = cut_band([[i == 0 ? 14 : pz0(i) + sleeve_h + 4, i == n_pieces - 1 ? shell_len - top_solid : pz1(i) - 4]],
                                   collar_z - 11, collar_z + 11);
 
 module shell_piece(i) {
