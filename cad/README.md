@@ -1,17 +1,19 @@
 # Downhill — Level 3 build
 
-**Current versions:** shell v4 · auger v5 · motor bar (top_bar) · coupler v4. See *Revision notes* at the bottom.
+**Current versions:** shell v7 (tower at the foot of the ramp, 9° lean) · auger v5 · motor bar (top_bar) · coupler v4. See *Revision notes* at the bottom.
 
 All parametric OpenSCAD. Open `downhill_assembly.scad` to see everything together.
 
 | File | What changed from v1 |
 |---|---|
 | `auger.scad` (v5) | 635 mm / 10 turns, 3 pieces of 211.7 mm, **umbrella flight (+40°)**, 1.2 mm solid flights. Key is male on the bottom of each piece; STLs export **upside down** for printing |
-| `downhill_shell.scad` (v4) | 650.8 mm long, 3 dry-fit pieces, 1.2 mm wall, 6 mm slots with **4 mm ribs, 24 mm rows** (all pieces) except a 60° solid strip on the low side, 15° spouts, **rim slots for the motor bar** |
-| `downhill_frame.scad` | shell 116.4 × 650.8, feet spread to ±150 mm for the taller tower |
+| `downhill_shell.scad` (v7) | 650.2 mm long, 3 dry-fit pieces, 1.2 mm wall, **hex lightening** (5 mm AF, 2.4 mm webs) except a 60° solid strip on the low side, 15° spouts, rim slots for the motor bar. **Sump + intake tray** (`sump`, `wing_left`, `wing_right`) at the foot of the ramp; `shell_lower` prints **upside down** |
+| `downhill_frame.scad` | shell 116.4 × 650.2, **lean 9°**, feet ±150 mm. **Rod cut length 359.7 mm** |
 | `downhill_top_bar.scad` | drop-in motor bar (prints flat, no supports) through two rim slots |
 | `downhill_coupler_v4.scad` | tapered plug + zip-tie collet; the motor shaft drops in with no force |
 | `downhill_top_drive.scad` | legacy ring mount + coupler, superseded by the two files above |
+
+> Heights, fit and weight below are from v4 (25° lean). At v7 the exits sit ~2" higher (ball sill ≈ 22.5", rim ≈ 25.3") and the sump + tray add ≈ 80 g net.
 
 ## Heights (Task 2 box rims: L3 = 15.75" / 400 mm)
 | Exit | At the shell | Spout lip | Clears L3 rim by |
@@ -86,3 +88,9 @@ N20 lead routing is the same as v1: about 130 mm over the rim to the driver boar
 - **Shell v3:** the v2 upper's 2 mm ribs flexed into the nozzle, snagged and broke. Ribs went to 4 mm, rows to 24 mm and rings to 5 mm, with no slots in the top 40 mm. Only the upper was printed at v3.
 - **Top drive:** the ring mount was replaced by a drop-in bar (`downhill_top_bar.scad`). The coupler is now v4 with a zip-tie collet.
 - **Shell v4:** the motor-bar rim slots (5.4 mm wide, 3.2 mm deep on ±X) are built in. The lower and middle pieces were re-exported with the v3 slot pattern (the v2 lower's ribs broke). The upper matches the hand-modified `shell_upper_v4.stl` exactly. Cost: about +11 g lower and +13 g middle over v2.
+- **Shell v6:** objects caught on the 24 mm slots, so they became a hex grid (5 mm across flats, 5.8 mm corner to corner, 2.4 mm webs, corners up/down so no supports). Same open area and keep-outs.
+- **Shell v7 (tower off the ramp):** objects were thrown back out of the 127 mm-tall v5 intake by the spinning flight. The tower now stands at the ramp's foot, centred, and leans 9° (was 25°) so the tray floor and sump floor form one plane from the ramp down to the tile.
+  - The tray's uphill edge is a wedge resting on the ramp 2.8–3.1" up the slope (inside the 4" contact zone). The wings funnel the 11.625" lane into the intake, float ≥3 mm over the ramp past the floor edge and stop 8 mm short of the 4" line.
+  - Intake: 150° arc × 50 mm (taller than a ball, lower than one 63.5 mm pitch). Anything flung out lands on the tray and rolls back in.
+  - The floor, 627 pin and a locating lip moved to the new `sump`. `shell_lower` is a plain tube that stands in the lip and prints upside down so the window top isn't a bridge. The tray is wider than the bed, so it splits at x = ±100 mm and the wings drop onto puzzle tabs (CA glue on the wall seams if loose).
+  - Placement: the tube axis sits ≈ 67 mm in from the ramp's bottom edge; the back of the sump rests on the tile ≈ 126 mm in. `boot` is retired; spouts now tilt with the lean (still 15° below horizontal). Collars and feet were re-exported for the new leg angle.

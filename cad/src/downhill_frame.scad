@@ -20,10 +20,10 @@ part = "assembly"; // [assembly, collar_front, collar_back, foot_left, foot_righ
 // NOTE: the electronics pod now lives in downhill_shell.scad (upper face, near the motor).
 show_old_pod = false;
 
-/* [Shell — from downhill_shell.scad v2] */
+/* [Shell — from downhill_shell.scad v7] */
 shell_od  = 116.4; // shell OD (114 bore + 2 x 1.2 wall)
-shell_len = 650.8; // shell length along its axis (base contact -> top)
-lean      = 25;    // degrees from vertical, leaning back
+shell_len = 650.2; // shell length along its axis (sump underside -> rim)
+lean      = 9;     // degrees from vertical, leaning back (v7: tower at the foot of the ramp; was 25)
 
 /* [Legs] */
 rod_d        = 6.35; // 1/4" dowel. Use 6.0 for 6 mm carbon tube
@@ -31,7 +31,7 @@ rod_clear    = 0.35; // diametral clearance in sockets (glue or friction)
 collar_frac  = 0.55; // collar position as fraction of shell_len
 foot_spread  = 150;  // each foot this far left/right of centreline
 foot_behind  = 40;   // feet land this far behind the top's ground shadow
-ground_dz    = 0;    // feet ground height vs. tube base contact (+ = higher)
+ground_dz    = -1.8*sin(lean); // feet ground height vs. tube base contact (+ = higher). v7: sump floor is 1.8 mm wider than the shell
 
 /* [Collar] */
 collar_h  = 18;
