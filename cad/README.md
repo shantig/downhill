@@ -5,7 +5,9 @@
   - `box_mount_north`: ~47 g PLA. Print upright as exported **with tree supports**. M3×6×5 inserts in its 2 ears.
   - `box_mount_south`: ~10 g. Flat, no supports. 2× M3×12.
 - **Box length sets the ball distance** (far end 30 mm past the near rim): 286 mm → D = 4" (the rule minimum), 337 mm → 6", 389 mm → 8", 491 mm → 12". The current 260 mm box only reaches ~3.4", which is under the 4" minimum.
-- Tie a fishing line from the top of the motor arm to the box's far end. The box is a cantilever.
+- **Zip ties instead of hooks:** 4 tie points on the back plate, each a pair of 5.5 × 3 mm slots 9 mm apart (ties up to 4.8 mm). Punch matching holes in the box end wall at ±38 mm from its centreline, 10 mm and 50 mm below its top edge.
+- **Wire holes:** four 3 mm radial holes 4 mm below the backbone top. 124° and 256° face the ball (north) side, 345° and 40° the dowel (south) side. Use them for the paper chutes' support wires and the box's far-end stay.
+- **Boundary check (DBT V4):** the box stays inside the footprint's east-west band (y −218…−96 mm, ramp edge at 0) and overhangs north past the footprint edge, which is allowed with no contact. At D = 4–6" its lowest point over the container opening is 456–463 mm, i.e. 56–63 mm above the Level 3 rim. It's nowhere near the ramp, the floor or the Task 1 boxes. Keep the paper chutes and wires clear of the containers too.
 - The printed collector/splitter concept (`downhill_sorter.scad`) is superseded on the tower. The `gate_test` part and the chute layout math still stand on their own.
 
 ---

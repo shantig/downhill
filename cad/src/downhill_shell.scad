@@ -63,6 +63,9 @@ arm_pad_w = 20;       // pad width (tangential)
 arm_pad_t = 4.0;      // pad wall (radial)
 arm_screw_dz = [7, 22]; // M3 screws above the arm underside
 m3_clear  = 3.4;
+wire_a    = [124, 256, 345, 40];  // v8.1 wire holes near the backbone top: 124/256 face the ball (north) side,
+                                  // 345/40 the dowel (south) side. For wires holding the paper chutes / box stay
+wire_d    = 3.0;
 seat_drop = 60;       // collector clamp band sits on this hoop (its top), below the window bottom
 
 /* [Hoops (v8)] */
@@ -301,6 +304,8 @@ module backbone() {
                              [Ri + arm_pad_t, arm_z - 8], [Ri + arm_pad_t, shell_len], [Ri, shell_len]]);
             }
         }
+        // wire holes (radial, through wall + top rib)
+        for (a = wire_a) rotate(a) translate([Ri - 3, 0, shell_len - 4]) rotate([0,90,0]) cylinder(d = wire_d, h = 20, $fn = 20);
         // arm screws (M3 clearance, radial; heads outside)
         rotate(arm_a) for (dz = arm_screw_dz) translate([Ri - 5, 0, arm_z + dz]) rotate([0,90,0]) cylinder(d = m3_clear, h = 20, $fn = 24);
         // keep the bore clean

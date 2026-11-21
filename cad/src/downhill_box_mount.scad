@@ -9,7 +9,8 @@
 //            below the exit window (M3x12 + M3x6x5 inserts in the ears)
 //   plate  : back plate against the box's SHORT end wall, tied to the
 //            band by 3 ribs
-//   hooks  : 2 hooks over the end wall's top edge (6 mm cardboard)
+//   ties   : 4 zip-tie points (2 slots each) through the back plate; punch
+//            matching holes in the box end wall and cinch the box to the plate
 //   lip    : sloped plate from the window bottom down over the end wall,
 //            closing the curved gap between the round shell and the flat
 //            box end, so everything leaving the window lands in the box
@@ -49,10 +50,13 @@ top_gap   = 10;       // box top edge below the window bottom (at the shell)
 band_t    = 2.0;
 band_h    = 16;
 plate_t   = 2.5;
-hook_t    = 2.2;
+hook_t    = 2.2;      // lip/plate top band thickness (was the hook bridge)
 hook_w    = 14;
 hook_y    = 38;       // hooks at +-hook_y
-hook_drop = 14;       // inner leg length down the inside of the end wall
+hook_drop = 14;
+tie_z     = [-10, -box_h + 16];   // zip-tie points (B frame z), at y = +-hook_y
+tie_slot  = [5.5, 3.0];           // slot width (y) x height (z): fits ties up to 4.8 mm
+tie_gap   = 9;                    // the two slots of one tie point, centre to centre (z)
 fit       = 0.4;      // clearance on the cardboard
 lip_t     = 1.6;
 wing_t    = 1.6;
@@ -99,6 +103,8 @@ module hooks_B() for (s = [-1,1]) translate([0, s*hook_y - hook_w/2, 0]) {
     translate([-box_t - fit - hook_t, 0, fit]) cube([box_t + 2*fit + hook_t + plate_t, hook_w, hook_t]);          // bridge over the top
     translate([-box_t - fit - hook_t, 0, -hook_drop]) cube([hook_t, hook_w, hook_drop + fit + hook_t]);            // inner leg
 }
+module tie_slots_B() for (sy = [-1,1], z = tie_z, dz = [-tie_gap/2, tie_gap/2])
+    translate([-1, sy*hook_y - tie_slot[0]/2, z + dz - tie_slot[1]/2]) cube([plate_t + fit + 2, tie_slot[0], tie_slot[1]]);
 module plate_B() {
     for (sy = [-1,1]) translate([fit, sy*hook_y - hook_w/2, -box_h + 6]) cube([plate_t, hook_w, box_h - 6 + fit + hook_t]);   // uprights
     translate([fit, -box_w/2 + 4, -box_h + 6]) cube([plate_t, box_w - 8, 10]);                                                  // bottom bar
@@ -155,7 +161,7 @@ module ribs_tube() difference() {
 module mount_north() {
     band_half(true);
     ribs_tube();
-    B() { plate_B(); hooks_B(); }
+    B() difference() { plate_B(); tie_slots_B(); }
     lip_tube();
     wings_tube();
 }
