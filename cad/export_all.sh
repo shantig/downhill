@@ -1,12 +1,15 @@
-#!/usr/bin/env bash
-# Re-export every printable STL from the OpenSCAD sources.  Usage: cad/export_all.sh
-set -euo pipefail
-cd "$(dirname "$0")/src"; out=../stl; mkdir -p "$out"
-ex() { echo "  $2"; openscad -q -o "$out/$2.stl" -D "part=\"$3\"" "$1"; }
-for p in shell_lower shell_middle shell_upper sump wing_right wing_left spout_ball spout_dowel pod; do
-  grep -q "\"$p\"" downhill_shell.scad && ex downhill_shell.scad "$p" "$p"; done
-for p in lower middle upper; do grep -q "\"$p\"" auger.scad && ex auger.scad "auger_$p" "$p"; done
-for p in collar_front collar_back foot_left foot_right; do ex downhill_frame.scad "$p" "$p"; done
-ex downhill_top_bar.scad motor_bar bar
-echo "  coupler_v4"; openscad -q -o "$out/coupler_v4.stl" downhill_coupler_v4.scad
-# legacy (superseded): downhill_top_drive.scad motor_mount / coupler
+#!/bin/sh
+# Export every printable part (v8). Needs OpenSCAD 2023+ (manifold backend makes the hex shells fast).
+# Usage: sh export_all.sh [openscad-binary]
+OS=${1:-openscad}
+cd "$(dirname "$0")/src" || exit 1
+mkdir -p ../stl
+ex() { echo "== $2"; $OS --backend=manifold -D "part=\"$2\"" -o "../stl/$3.stl" "$1"; }
+for p in shell_lower shell_middle shell_upper sump wing_right wing_left pod clamp_a clamp_b key; do ex downhill_shell.scad $p $p; done
+ex downhill_crown.scad arm motor_arm
+ex downhill_crown.scad strap motor_strap
+ex downhill_coupler_v5.scad coupler coupler_v5
+ex downhill_coupler_v5.scad jig coupler_v5_drill_jig
+for p in collector_a collector_b splitter chute_ball chute_dowel sleeve; do ex downhill_sorter.scad $p sorter_$p; done
+for p in collar_front collar_back foot_left foot_right; do ex downhill_frame.scad $p $p; done
+for p in lower middle upper; do echo "== auger_$p (unchanged v5)"; done

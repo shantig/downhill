@@ -1,146 +1,139 @@
 // =====================================================================
-// Downhill Dispatcher — auger shell + sump + intake tray (v7: tower at the foot of the ramp)
-// v3: v2 ribs (2 mm) flexed and snagged/broke -> 4 mm ribs, 24 mm rows, 5 mm rings.
-// v4: rim slots for the drop-in motor bar (downhill_top_bar.scad).
-// v5: shell sat on the ramp at 25 deg with floating hopper wings (retired).
-// v6: hex lightening (5 mm AF, 2.4 mm webs, corners up/down) in place of slots.
-// v7: tower moved OFF the ramp, centred at its foot. Objects were thrown back
-//     out of the 127 mm-tall v5 intake by the spinning flight.
-//   * The intake floor is ONE plane from the ramp down into the tube: the tray
-//     floor and the sump floor are coplanar, perpendicular to the tube axis.
-//     That plane can only reach the ramp below the 4 in line if the tube leans
-//     ~9 deg (it was 25). lean is a parameter; edge_s sets where the tray meets
-//     the ramp.
-//   * The tray's uphill edge is a 15-16 deg wedge whose underside rests on the
-//     ramp (allowed contact, < 4 in) and whose top is flush with the ramp, so
-//     objects roll on with no step. Wings funnel the 11.625 in lane down to
-//     the intake; past the floor edge they float 3+ mm above the ramp and stop
-//     8 mm short of the 4 in line.
-//   * Intake = 150 deg arc, 50 mm tall: lower than one auger pitch (63.5) and
-//     taller than a 40 mm ball. Anything flung out lands on the tray, which
-//     slopes back into the sump.
-//   * The floor, 627 pin and a locating lip moved from shell_lower to the new
-//     sump. shell_lower is a plain tube whose back half stands on the sump
-//     floor inside the lip; its front half stops at the window top. It prints
-//     UPSIDE DOWN (sleeve on the bed) so the window top is not a bridge.
-//   * The tray is wider than the X2D bed (256), so it splits at x = +/-100:
-//     sump (centre) + wing_left + wing_right, joined by drop-in puzzle tabs.
-//   * Spout tilt now follows the lean (still 15 deg below horizontal).
-//     middle / upper pieces are unchanged from v6.
+// Downhill Dispatcher — auger shell + sump + intake tray (v8: open top exit)
+// v3..v6: rib/slot/hex lightening experiments.   v7: tower at the foot of the ramp.
+// v8 (testing feedback 2026-11-20):
+//   * TOP EXIT. The side ball port, dowel slot, spout pad and spouts are gone.
+//     The upper piece stops as a full tube one auger pitch below the auger top
+//     (z_w0). Above that only a 145 deg BACKBONE rises (bb_a0..bb_a1); the other
+//     215 deg is open. Objects ride the flight into the open arc and roll off
+//     the 40 deg umbrella flight sideways, mostly right at the backbone's
+//     leading edge (bb_a0), into the sorter's collector (downhill_sorter.scad).
+//     With the auger turning CW seen from above (the lifting direction for this
+//     right-hand flight), the stream leaves heading west / north-west.
+//   * The motor ARM (downhill_crown.scad) bolts to a pad on the backbone with
+//     2x M3 from outside. Nothing crosses the opening.
+//   * JOINTS: keyed 45 deg flanges + 2-piece V clamp (downhill_joint.scad),
+//     replacing the 16 mm dry-fit sleeves. Bore is smooth across every joint.
+//   * STIFFER: triangular hoops (1.6 mm proud, 45 deg both sides, no supports)
+//     every ~3 hex rows stop the wall bulging out between flights.
+//   * ANTI-SNAG pattern, identical on every piece and the tray wings: 4 mm AF
+//     hex holes (were 5), 2.0 mm webs. A dowel lying across a hole now dips
+//     0.5 mm into it (was 1.2 = the whole wall), so it can't catch an edge.
+//     Underside 270 +/- 30 deg stays solid (objects ride there).
+//   * All screw holes are heat-set insert holes (M3x4x5 in the pod bosses).
+//   * Intake (sump + wings) geometry is unchanged from v7 (untested); it picks
+//     up the new hole pattern and a hoop just above the intake window.
 // ---------------------------------------------------------------------
 // Tube frame: z = shell axis, z = 0 = underside of the sump floor.
 //   -Y = low side (back, away from the ramp)   +Y = faces UP the ramp
+//   +X = south, -X = north (ramp rises toward +Y = east)
 // World frame (assembly): ramp's bottom edge = line y = 0, z = 0; ramp rises
 //   toward +y at ramp_ang; tile floor z = 0.  world = place_tube(tube).
-// CLI: openscad -D 'part="sump"' -o sump.stl downhill_shell.scad
+// CLI: openscad -D 'part="shell_upper"' -o shell_upper.stl downhill_shell.scad
 // =====================================================================
+use <downhill_joint.scad>
 
-part = "assembly"; // [assembly, shell_lower, shell_middle, shell_upper, sump, wing_right, wing_left, spout_ball, spout_dowel, pod]
+part = "assembly"; // [assembly, shell_lower, shell_middle, shell_upper, sump, wing_right, wing_left, pod, clamp_a, clamp_b, key]
 
-/* [Auger (from auger.scad v5)] */
+/* [Auger (auger.scad v5)] */
 auger_len   = 635;
 auger_od    = 110;
 tube_id     = 114;    // shell bore
 auger_pitch = 63.5;   // total_len / turns
 
 /* [Shell] */
-wall      = 1.2;      // 3 lines @ 0.4 nozzle (set wall line width 0.40)
+wall      = 1.2;      // 3 lines @ 0.4 nozzle. PLA Aero: try 1.6
 floor_t   = 2.4;      // sump floor
 floor_hole = 5;       // floor lightening hexes (< 8 mm dowel)
-rim_z     = 10;       // shell rim above auger top (= rim_z in downhill_top_drive.scad)
-n_pieces  = 3;        // ~217 mm each (X2D: 260 mm Z)
-sleeve_h  = 16;       // dry-fit joints: pack it apart, push together on site
-sleeve_t  = 1.6;
-sleeve_fit = 0.15;    // radial (a wrap of tape if loose)
+n_pieces  = 3;
+
+/* [Top exit (v8)] */
+exit_h    = 64;       // open height below the auger top (>= one pitch, see header)
+bb_a0     = -20;      // backbone: leading edge (objects leave here, CW travel)
+bb_a1     = 125;      // backbone: trailing edge (covers the pod at +Y)
+bb_t      = 2.0;      // backbone wall (thicker than the tube)
+bb_rib    = 3.0;      // vertical edge ribs: radial depth
+bb_rib_w  = 4.0;
+arm_a     = 20;       // motor arm direction (deg)
+arm_zb    = 7;        // arm underside above the auger top (coupler boss top = 6)
+arm_h     = 29;       // arm height -> backbone top = auger top + 36
+arm_pad_w = 20;       // pad width (tangential)
+arm_pad_t = 4.0;      // pad wall (radial)
+arm_screw_dz = [7, 22]; // M3 screws above the arm underside
+m3_clear  = 3.4;
+seat_drop = 45;       // collector clamp band sits on this hoop (its top), below the window bottom
+
+/* [Hoops (v8)] */
+hoops     = true;
+hoop_d    = 1.6;      // radial
+hoop_h    = 3.2;      // axial (triangle, 45 deg both sides)
+hoop_rows = 4;        // hex rows per hoop pitch (~21 mm, 3 per flight pitch)
 
 /* [Bottom pin for the 627 bearing] */
 pin_mode    = "printed"; // [printed, steel]
-pin_d       = 6.95;   // printed pin, snug in the 7 mm bore
-steel_pin_d = 7.1;    // socket for a 7 mm steel pin / drill blank (glue in)
-pin_len     = 8;      // above the shoulder
-shoulder_d  = 9.5;    // touches the inner race only
+pin_d       = 6.95;
+steel_pin_d = 7.1;
+pin_len     = 8;
+shoulder_d  = 9.5;
 shoulder_h  = 3;
 
 /* [Layout (v7): tower at the foot of the ramp] */
-lean        = 9;      // deg from vertical. Larger moves the ramp contact up toward the 4 in line
-ramp_ang    = 25.05;  // +/- 0.45
-ramp_zone   = 101.6;  // 4 in contact zone, along the slope from the ramp's bottom edge
-edge_s      = 80;     // tray floor meets the ramp this far up the slope
-ramp_in_w   = 295.3;  // 11.625 in between the ramp side walls. MEASURE the real ramp
-ramp_out_w  = 355.6;  // 14 in deck (side walls start at the 4 in line)
-ramp_len    = 914.4;  // 36 in
-ramp_wall_h = 127;    // 5 in
+lean        = 9;
+ramp_ang    = 25.05;
+ramp_zone   = 101.6;
+edge_s      = 80;
+ramp_in_w   = 295.3;
+ramp_out_w  = 355.6;
+ramp_len    = 914.4;
+ramp_wall_h = 127;
 
 /* [Sump + intake window (v7)] */
-win_h     = 50;       // window height above the floor (< pitch 63.5, > 40 mm ball)
-win_a0    = 15;       // window arc (deg CCW from +X; +Y = 90 faces the ramp)
+win_h     = 50;
+win_a0    = 15;
 win_a1    = 165;
-lintel    = 8;        // solid band above the window
-lip_h     = 6;        // locating lip around the back of the shell
+lintel    = 8;
+lip_h     = 6;
 lip_t     = 1.6;
 lip_fit   = 0.2;
 
 /* [Intake tray (v7)] */
-tray_t       = floor_t; // floor thickness (= sump floor, so the whole underside prints flat on the bed)
-edge_t       = 0.4;   // thickness at the uphill edge (top sits this far above the ramp there)
+tray_t       = floor_t;
+edge_t       = 0.4;
 wing_t       = 1.6;
-wing_top     = 75;    // above the sump floor top
-lip_w        = 6;     // inward lip on top of the wings
-mouth_x      = 150;   // wing inner face at the mouth (ramp walls are at 147.6)
-mouth_margin = 8;     // wings stop this far below the 4 in line
-mouth_len    = 25;    // straight lead-in at the mouth
-float_gap    = 3;     // wing clearance over the ramp past the floor edge
-split_x      = 100;   // tray splits here (X2D bed is 256)
-tab_d = 10; tab_neck = 6; tab_len = 6; tab_fit = 0.15;   // drop-in puzzle tabs
+wing_top     = 75;
+lip_w        = 6;
+mouth_x      = 150;
+mouth_margin = 8;
+mouth_len    = 25;
+float_gap    = 3;
+split_x      = 100;
+tab_d = 10; tab_neck = 6; tab_len = 6; tab_fit = 0.15;
 
-/* [Exits on the underside] */
-ball_w       = 70;    // ball port chord width (balls are 40 mm)
-ball_rect_h  = 12;    // straight part; roof adds ball_w/2*tan(ball_roof)
-ball_roof    = 50;
-ball_top_gap = 7;     // port top this far below the auger top
-dow_w        = 70;    // dowel slot chord width
-dow_h        = 13;    // slot height (dowel 8 mm, ball 40 mm can't pass)
-dow_chamfer  = 2.5;   // inner top-edge chamfer so balls don't catch
-pad_t        = 3;     // spout pad thickness (outside the wall)
-pad_m        = 14;    // pad margin around the openings (screws sit outside the spout walls)
-pilot_d      = 2.5;   // M3 self-tap pilot
-
-/* [Spouts] */
-spout_drop  = 15;     // deg below horizontal (dowels roll crosswise)
-spout_len   = 50;
-spout_wall  = 1.2;
-spout_floor = 1.6;
-flange_t    = 2.0;
-
-/* [Lightening: hex grid (v6)] */
+/* [Lightening: hex grid (v8 anti-snag)] */
 lite      = true;
-hex_af    = 5;        // across flats (sideways); corners point up/down -> no supports
-hex_rib   = 2.4;      // web between holes (6 lines @ 0.4)
-top_solid = 40;       // no holes in the top 40 mm (pad corners, pod bosses, motor-cap rim)
-lite_a0   = -60;      // arc that gets holes (deg, CCW from +X; +Y = 90)
-lite_a1   = 240;      // underside 270 +/- 30 stays solid (objects ride here)
-
-/* [Motor-bar rim slots (downhill_top_bar.scad)] */
-bar_slots   = true;
-bar_slot_w  = 5.4;    // tenon 5 + 0.2 per side
-bar_slot_z  = 6.8;    // slot floor above the auger top face (bar underside 7 - 0.2)
+hex_af    = 4;        // across flats (sideways); corners up/down -> no supports
+hex_rib   = 2.0;      // web between holes (5 lines @ 0.4)
+lite_a0   = -60;
+lite_a1   = 240;      // underside 270 +/- 30 stays solid
 
 /* [Electronics pod (upper face)] */
 pod_gap    = 4;
 plate_t    = 3;
 plate_w    = 68;
 plate_l    = 126;
-end_band   = 8;       // plate ends kept solid
+end_band   = 8;
 boss_d     = 9;
-boss_inset = 5;       // boss centre from plate end
-pod_screw_x = 28;     // M3x10 plate -> boss
-pod_top_gap = 12;     // clear of the motor-cap skirt (10 mm)
-standoff_hole = 2.9;  // M2.5
-drv_hole_x = 49;  drv_hole_z = 58;   // General Driver for Robots, 65x65
-drv_from_top = 41;                    // driver board centre below plate top
+boss_inset = 5;
+pod_screw_x = 28;     // M3x10 plate -> M3x4x5 insert in the boss
+pod_top_gap = 4;
+m3_ins_d   = 4.5;     // M3x4x5 insert hole
+m3_ins_l   = 5;
+standoff_hole = 2.9;
+drv_hole_x = 49;  drv_hole_z = 58;
+drv_from_top = 41;
 batt_w = 28.7; batt_l = 53.7; strap_w = 2.6; strap_l = 14;
 ano_hole_x = 30.48; ano_hole_z = 35.56;
-ano_zc     = 30;                      // ANO adapter centre above plate bottom
+ano_zc     = 30;
 
 /* [Preview] */
 show_ramp = true;
@@ -150,53 +143,40 @@ $fn = 120;
 // ------------------------------ derived -------------------------------
 Ri = tube_id/2;
 R  = Ri + wall;
-z_a0 = floor_t + shoulder_h - 0.2;        // auger bottom face (bearing sits 0.2 proud)
+z_a0 = floor_t + shoulder_h - 0.2;        // auger bottom face
 z_a1 = z_a0 + auger_len;                  // auger top face
-shell_len = z_a1 + rim_z;
-z_rim = floor_t + win_h;                  // window top = front bottom edge of shell_lower
-spout_tilt = spout_drop - lean;           // vs. tube frame
+z_w0 = z_a1 - exit_h;                     // window bottom (top of the full tube)
+shell_len = z_a1 + arm_zb + arm_h;        // backbone top
+z_rim = floor_t + win_h;                  // intake window top
+z_seat = z_w0 - seat_drop;                // collector seat hoop (top of it)
 
 // placement: tube frame -> world (rotate by lean about X, then translate)
-Rs  = R + lip_fit + lip_t;                // sump floor radius
-T_z = Rs*sin(lean);                       // low edge of the sump floor touches the tile
+Rs  = R + lip_fit + lip_t;
+T_z = Rs*sin(lean);
 T_y = edge_s*cos(ramp_ang) + floor_t*sin(lean)
       - (edge_s*sin(ramp_ang) - T_z - floor_t*cos(lean))/tan(lean);
 module place_tube() translate([0, T_y, T_z]) rotate([lean,0,0]) children();
-// the ramp surface in the tube frame: z = ramp_z(y)
 rk     = ramp_ang - lean;
 ramp_c = sin(ramp_ang)*T_y - cos(ramp_ang)*T_z;
 function ramp_z(y) = (ramp_c + sin(rk)*y)/cos(rk);
 function ramp_y(z) = (z*cos(rk) - ramp_c)/sin(rk);
 function tube_pt(s) = let(dy = s*cos(ramp_ang) - T_y, dz = s*sin(ramp_ang) - T_z)
-                      [dy*cos(lean) + dz*sin(lean), -dy*sin(lean) + dz*cos(lean)];   // ramp point s -> [y, z]
-function slope_s(y, z) = (T_y + y*cos(lean) - z*sin(lean))/cos(ramp_ang);           // tube point on the ramp -> s
+                      [dy*cos(lean) + dz*sin(lean), -dy*sin(lean) + dz*cos(lean)];
+function slope_s(y, z) = (T_y + y*cos(lean) - z*sin(lean))/cos(ramp_ang);
 function world_z(y, z) = T_z + y*sin(lean) + z*cos(lean);
+function world_pt(p) = [p[0], T_y + p[1]*cos(lean) - p[2]*sin(lean), T_z + p[1]*sin(lean) + p[2]*cos(lean)];
 
 // tray outline (tube frame, right half; left is the mirror)
-y_e  = ramp_y(floor_t - edge_t);          // uphill edge of the floor
-y_c0 = ramp_y(floor_t - tray_t);          // ramp contact starts here (wedge underside)
+y_e  = ramp_y(floor_t - edge_t);
+y_c0 = ramp_y(floor_t - tray_t);
 y_m  = tube_pt(ramp_zone - mouth_margin)[0];
 y_1  = y_m - mouth_len;
-J    = [(R + 0.3)*cos(win_a0), (R + 0.3)*sin(win_a0)];   // wing meets the shell at the window jamb
+J    = [(R + 0.3)*cos(win_a0), (R + 0.3)*sin(win_a0)];
 wing_pts = [[(R - 2)*cos(win_a0), (R - 2)*sin(win_a0)], [mouth_x, y_1], [mouth_x, y_m]];
-y_split = J[1] + (split_x - J[0])*(y_1 - J[1])/(mouth_x - J[0]);   // wing crosses the split line
+y_split = J[1] + (split_x - J[0])*(y_1 - J[1])/(mouth_x - J[0]);
 tab_ys  = [y_split + 0.3*(y_e - 20 - y_split), y_split + 0.75*(y_e - 20 - y_split)];
 
-// ball port
-ball_roof_h = ball_w/2 * tan(ball_roof);
-bp_z1 = z_a1 - ball_top_gap;
-bp_z0 = bp_z1 - ball_rect_h - ball_roof_h;
-// dowel slot (helical, follows the flight)
-dow_ang  = 2*asin((dow_w/2)/R);
-dow_dz   = dow_ang/2/360*auger_pitch;
-dfl_top  = bp_z0 - 0.5 - spout_floor - 1;
-dow_zc   = dfl_top - 3 - dow_dz - dow_h/2;
-dow_low  = dow_zc - dow_h/2 - dow_dz;
-// spout pad
-pad_hw = max(ball_w, dow_w)/2 + pad_m;
-pad_z0 = dow_low - 0.5 - spout_floor - 3;
-pad_z1 = z_a1 - 1;
-// pod
+// pod (on the backbone)
 pod_s  = shell_len - pod_top_gap - plate_l;
 pod_y0 = R + pod_gap;
 boss_ys = sqrt(R*R - pod_screw_x*pod_screw_x);
@@ -209,42 +189,34 @@ collar_z = 0.55*shell_len;
 hex_hc = hex_af/cos(30);
 hex_hp = hex_af + hex_rib;
 hex_vp = hex_hp*sqrt(3)/2;
+hoop_p = hoop_rows*hex_vp;               // hoop spacing
 // pieces
 splits = [for (i = [1:n_pieces-1]) round(i*shell_len/n_pieces)];
 function pz0(i) = i == 0 ? floor_t : splits[i-1];
 function pz1(i) = i == n_pieces - 1 ? shell_len : splits[i];
-function exit_h(z) = world_z(-R, z);      // height above the tile of an underside point
+fh = fl_h();                              // flange height (joint lib)
+// keep-outs for hoops (z bands): flanges, collar, collector seat region, pod bosses
+function no_hoop(z) = [for (sp = splits) if (abs(z - sp) < fh + 6) 1] != [] ||
+                      abs(z - collar_z) < 9 + hoop_h ||
+                      z < z_rim + 3;
+hoop_list = [for (k = [0:200]) let(z = z_rim + 4 + hoop_h/2 + k*hoop_p) if (z < z_seat - 2*hoop_h - 4 && !no_hoop(z)) z];
+hoop_all  = concat(hoop_list, [z_seat - hoop_h/2]);
 
-echo(str("SHELL: OD ", 2*R, "  length ", shell_len, "  auger ", z_a0, "..", z_a1, "  lean ", lean));
-echo(str("HEIGHT above tile: ball sill ", exit_h(bp_z0), " mm (", exit_h(bp_z0)/25.4, " in), dowel low sill ",
-         exit_h(dow_low), " mm.  Rim ", world_z(-R, shell_len), " mm (", world_z(-R, shell_len)/25.4, " in).  Level 3 = 400 mm"));
-echo(str("PLACE: tube axis (floor centre) ", -T_y, " mm in from the ramp's bottom edge; sump low edge on the tile ",
-         -(T_y - Rs*cos(lean)), " mm in"));
-echo(str("RAMP CONTACT: tray edge rests on the ramp from s = ", slope_s(y_c0, floor_t - tray_t), " to ", slope_s(y_e, floor_t - edge_t),
-         " mm up the slope (4 in = ", ramp_zone, ").  Wings reach s = ", slope_s(y_m, ramp_z(y_m)), " mm, ", float_gap, "+ mm above the ramp"));
-echo(str("INTAKE: floor slope ", lean, " deg; window ", win_a1 - win_a0, " deg arc (", 2*Ri*sin((win_a1 - win_a0)/2), " mm chord) x ", win_h, " mm"));
-echo(str("TRAY: mouth ", 2*(mouth_x + wing_t), " mm outside, funnel ", y_m - J[1], " mm long; wings ", atan((mouth_x - J[0])/(y_1 - J[1])), " deg to the flow"));
-echo(str("Pieces (tall): ", [for (i = [0:n_pieces-1]) pz1(i) - pz0(i) + (i < n_pieces - 1 ? sleeve_h : 0)], "  splits ", splits));
-for (i = [0:n_pieces-1]) assert(pz1(i) - pz0(i) + sleeve_h <= 255, "piece too tall");
-for (z = splits) assert(collar_z - 11 > z + sleeve_h || collar_z + 11 < z, "collar lands on a joint sleeve");
-assert(pad_z0 - pad_t > splits[n_pieces-2] + sleeve_h + 2, "exits must sit on the top piece");
+echo(str("SHELL v8: OD ", 2*R, "  length ", shell_len, "  auger ", z_a0, "..", z_a1, "  lean ", lean));
+echo(str("EXIT: full tube up to z ", z_w0, " (", exit_h, " mm below the auger top); open arc ", 360 - (bb_a1 - bb_a0),
+         " deg; window bottom above tile: west ", world_z(-R, z_w0), " mm (", world_z(-R, z_w0)/25.4, " in), north/south ", world_z(0, z_w0), " mm"));
+echo(str("Backbone top above tile ", world_z(R, shell_len), " mm. Level 3 rim = 400 mm"));
+echo(str("PLACE: tube axis ", -T_y, " mm in from the ramp's bottom edge"));
+echo(str("Pieces (tall): ", [for (i = [0:n_pieces-1]) pz1(i) - pz0(i)], "  splits ", splits, "  hoops ", len(hoop_all), " at ", hoop_all));
+for (i = [0:n_pieces-1]) assert(pz1(i) - pz0(i) <= 255, "piece too tall for the X2D");
+for (z = splits) assert(abs(collar_z - z) > 9 + fh + 4, "frame collar lands on a joint");
+assert(splits[n_pieces-2] < z_seat - 30, "collector seat must be on the top piece, clear of the joint");
 assert(hex_hc < 7.5, "hex holes must stay smaller than a dowel (8 mm)");
-assert(win_h < auger_pitch - 8 && win_h > 44, "window must fit a ball and stay under one pitch");
-assert(slope_s(y_m, ramp_z(y_m)) < ramp_zone - 5, "wings reach past the 4 in line");
-assert(slope_s(y_e, floor_t) < ramp_zone - 10, "ramp contact too close to the 4 in line");
-assert(T_y + Rs*cos(lean) < 0, "sump overhangs the ramp's bottom edge");
-assert(y_split < y_e - 30, "split line misses the floor");
+assert(win_h < auger_pitch - 8 && win_h > 44, "intake window must fit a ball and stay under one pitch");
+assert(exit_h >= auger_pitch, "exit window must be at least one pitch tall (objects must leave before the top)");
+assert(pod_s > splits[n_pieces-2] + fh + 4, "pod must sit on the top piece");
 
 // ------------------------------ helpers -------------------------------
-module helix_band(prof, a0, a1, zc, pitch, n = 40) {
-    m = len(prof);
-    pts = [for (i = [0:n]) let(a = a0 + (a1 - a0)*i/n, dz = (a - (a0 + a1)/2)/360*pitch)
-             for (p = prof) [p[0]*cos(a), p[0]*sin(a), zc + dz + p[1]]];
-    sides = [for (i = [0:n-1], k = [0:m-1]) [m*i + k, m*i + (k+1)%m, m*(i+1) + (k+1)%m, m*(i+1) + k]];
-    caps  = [[for (k = [m-1:-1:0]) k], [for (k = [0:m-1]) m*n + k]];
-    polyhedron(pts, concat(sides, caps), convexity = 4);
-}
-
 module tube(r1, r2, z0, z1) translate([0,0,z0]) difference() {
     cylinder(r = r2, h = z1 - z0); translate([0,0,-1]) cylinder(r = r1, h = z1 - z0 + 2);
 }
@@ -252,105 +224,113 @@ module tube(r1, r2, z0, z1) translate([0,0,z0]) difference() {
 module sector(r, a0, a1, n = 48)
     polygon(concat([[0,0]], [for (i = [0:n]) let(a = a0 + (a1 - a0)*i/n) r*[cos(a), sin(a)]]));
 
-// pointed-roof window cut, projected along -Y
-module roof_cut(w, z0, rect_h, roof_ang, depth = 120) {
-    rh = w/2*tan(roof_ang);
-    rotate([90,0,0]) linear_extrude(height = depth, center = false)
-        polygon([[-w/2, z0], [w/2, z0], [w/2, z0 + rect_h], [0, z0 + rect_h + rh], [-w/2, z0 + rect_h]]);
-}
-
 // everything below the ramp surface (+ dz), tube frame
 module below_ramp(dz = 0) translate([0, 0, ramp_c/cos(rk) + dz]) rotate([rk,0,0]) translate([-600,-600,-1200]) cube([1200,1200,1200]);
 
-module hex_hole(a, z) rotate(a) translate([Ri - 1, 0, z]) rotate([0,90,0])
-    cylinder(d = hex_hc, h = wall + 2, $fn = 6);
+module hex_hole(a, z, t = wall) rotate(a) translate([Ri - 1, 0, z]) rotate([0,90,0])
+    cylinder(d = hex_hc, h = t + 2, $fn = 6);
 
-// ------------------------------ openings ------------------------------
-module ball_port_cut(depth = 120) roof_cut(ball_w, bp_z0, ball_rect_h, ball_roof, depth);
+// triangular hoop, 45 deg both sides (prints either way up)
+module hoop(z) translate([0,0,z]) rotate_extrude($fn = 160)
+    polygon([[R - 0.01, -hoop_h/2], [R + hoop_d, 0], [R - 0.01, hoop_h/2]]);
 
-module dowel_slot_cut(r_out = R + 1) {
-    a0 = 270 - dow_ang/2; a1 = 270 + dow_ang/2;
-    helix_band([[Ri - 1, -dow_h/2], [r_out, -dow_h/2], [r_out, dow_h/2],
-                [Ri + 1.2, dow_h/2], [Ri - 1, dow_h/2 + dow_chamfer]],
-               a0, a1, dow_zc, auger_pitch);
-}
+// arc band (r1..r2, z0..z1) between angles a0..a1
+module arc_band(r1, r2, z0, z1, a0, a1) rotate(a0) rotate_extrude(angle = a1 - a0, $fn = 160)
+    translate([r1, z0]) square([r2 - r1, z1 - z0]);
 
+// ------------------------------ intake window ---------------------------
 module window_cut() translate([0,0,-1]) linear_extrude(z_rim + 1) sector(R + 10, win_a0, win_a1);
 
-// ------------------------------ lightening (v6 hex) -------------------
-module lite_cuts(spans, skip_window = false, skip_pad = false) {
+// ------------------------------ lightening (v8 hex) -------------------
+module lite_cuts(spans, skip_window = false) {
     rm  = R - wall/2;
     da  = hex_hp/rm*180/PI;
     n   = floor((lite_a1 - lite_a0)/da);
     bda = (boss_d/2 + hex_rib + hex_af/2)/R*180/PI;
-    pda = asin(pad_hw/R) + da/2;
-    for (s = spans) if (s[1] - s[0] > hex_hc + 2) {
+    for (s = spans) if (s[1] - s[0] > hex_hc + 1) {
         nz  = floor((s[1] - s[0] - hex_hc)/hex_vp) + 1;
         z00 = s[0] + (s[1] - s[0] - (nz - 1)*hex_vp)/2;
         for (j = [0:nz-1]) let(z = z00 + j*hex_vp, ph = j % 2, zl = z - hex_hc/2, zh = z + hex_hc/2)
             for (i = [0:n - 1 - ph]) let(a = lite_a0 + (i + 0.5 + ph/2)*da, an = (a + 360) % 360)
                 if (!(skip_window && zl < z_rim + lintel && an > win_a0 - da && an < win_a1 + da) &&
                     [for (zb = boss_z, ab = boss_a)
-                        if (zh > zb - boss_D - boss_d && zl < zb + boss_d && abs(a - ab) < bda) 1] == [] &&
-                    !(skip_pad && zh > pad_z0 - pad_t - 2 && abs(an - 270) < pda))
+                        if (zh > zb - boss_D - boss_d && zl < zb + boss_d && abs(a - ab) < bda) 1] == [])
                     hex_hole(a, z);
     }
 }
 
-// ------------------------------ pod bosses ----------------------------
+// ------------------------------ pod bosses (M3x4x5 inserts) ------------
 module pod_boss(x, zb) difference() {
     hull() {
         translate([x, 30, zb]) rotate([-90,0,0]) cylinder(d = boss_d, h = pod_y0 - 30, $fn = 32);
         translate([x, 30, zb - boss_D - 1]) rotate([-90,0,0]) cylinder(d = boss_d, h = boss_ys - 30, $fn = 32);
     }
     translate([0,0,zb - boss_D - 10]) cylinder(r = Ri, h = boss_D + 20);
-    translate([x, pod_y0 + 1, zb]) rotate([90,0,0]) cylinder(d = pilot_d, h = boss_D + 1, $fn = 20);
+    translate([x, pod_y0 + 1, zb]) rotate([90,0,0]) cylinder(d = m3_ins_d, h = m3_ins_l + 1.5, $fn = 24);
 }
 module pod_bosses() for (x = [-pod_screw_x, pod_screw_x], z = boss_z) pod_boss(x, z);
 
-// ------------------------------ spout pad -----------------------------
-module spout_pad() {
-    intersection() {
+// ------------------------------ backbone + arm pad (v8) ------------------
+arm_z = z_a1 + arm_zb;                     // arm underside
+module backbone() {
+    H0 = z_w0 - 2;
+    difference() {
         union() {
-            translate([0,0,pad_z0]) cylinder(r = R + pad_t, h = pad_z1 - pad_z0);
-            translate([0,0,pad_z0 - pad_t]) cylinder(r1 = R - 0.5, r2 = R + pad_t, h = pad_t + 0.01);
+            // wall, thickened outward with a 45 deg foot
+            rotate(bb_a0) rotate_extrude(angle = bb_a1 - bb_a0, $fn = 160)
+                polygon([[Ri, H0], [R, H0], [Ri + bb_t, H0 + bb_t - wall], [Ri + bb_t, shell_len], [Ri, shell_len]]);
+            // vertical edge ribs (outside), 45 deg feet
+            for (a = [bb_a0, bb_a1]) rotate(a) {
+                w = bb_rib_w; s = a == bb_a0 ? 0 : -w;
+                hull() {
+                    translate([Ri + 0.5, s, z_w0 - 12]) cube([wall - 0.5, w, 1]);
+                    translate([Ri + 0.5, s, z_w0 - 12 + bb_rib + 1]) cube([bb_t + bb_rib - 0.5, w, 1]);
+                    translate([Ri + 0.5, s, shell_len - 1]) cube([bb_t + bb_rib - 0.5, w, 1]);
+                }
+            }
+            // top rim rib (outside), 45 deg underside
+            rotate(bb_a0) rotate_extrude(angle = bb_a1 - bb_a0, $fn = 160)
+                polygon([[Ri + 0.5, shell_len - 3 - bb_rib], [Ri + bb_t + bb_rib, shell_len - 3], [Ri + bb_t + bb_rib, shell_len], [Ri + 0.5, shell_len]]);
+            // arm pad
+            rotate(arm_a) {
+                a0 = -asin(arm_pad_w/2/Ri); a1 = -a0;
+                rotate(a0) rotate_extrude(angle = a1 - a0, $fn = 160)
+                    polygon([[Ri, arm_z - 8 - arm_pad_t], [Ri + bb_t, arm_z - 8 - arm_pad_t + bb_t - wall],
+                             [Ri + arm_pad_t, arm_z - 8], [Ri + arm_pad_t, shell_len], [Ri, shell_len]]);
+            }
         }
-        translate([-pad_hw, -R - pad_t - 5, pad_z0 - pad_t - 1]) cube([2*pad_hw, R, pad_z1 - pad_z0 + pad_t + 2]);
+        // arm screws (M3 clearance, radial; heads outside)
+        rotate(arm_a) for (dz = arm_screw_dz) translate([Ri - 5, 0, arm_z + dz]) rotate([0,90,0]) cylinder(d = m3_clear, h = 20, $fn = 24);
+        // keep the bore clean
+        translate([0,0,H0 - 20]) cylinder(r = Ri, h = shell_len);
     }
 }
-function pad_holes() = [[-(pad_hw - 5), bp_z0 + ball_rect_h + 6], [pad_hw - 5, bp_z0 + ball_rect_h + 6],
-                        [-(pad_hw - 5), dow_zc], [pad_hw - 5, dow_zc]];
-module pad_pilots(d = pilot_d, depth = pad_t + wall - 1) for (h = pad_holes())
-    translate([h[0], -sqrt(pow(R + pad_t, 2) - h[0]*h[0]) - 1, h[1]]) rotate([-90,0,0]) cylinder(d = d, h = depth + 1, $fn = 20);
 
 // ------------------------------ shell pieces --------------------------
 function cut_band(spans, c0, c1) = [for (sp = spans) each ((c1 <= sp[0] || c0 >= sp[1]) ? [sp] : [[sp[0], c0], [c1, sp[1]]])];
-function lite_spans(i) = cut_band([[i == 0 ? floor_t + lip_h + 4 : pz0(i) + sleeve_h + 4, i == n_pieces - 1 ? shell_len - top_solid : pz1(i) - 4]],
-                                  collar_z - 11, collar_z + 11);
+function cut_bands(spans, bands, k = 0) = k >= len(bands) ? spans : cut_bands(cut_band(spans, bands[k][0], bands[k][1]), bands, k + 1);
+function lite_spans(i) = let(top = i == n_pieces - 1,
+                             z0 = i == 0 ? floor_t + lip_h + 4 : pz0(i) + fh + 2,
+                             z1 = top ? z_w0 - 3 : pz1(i) - fh - 2)
+    cut_bands([[z0, z1]], concat([[collar_z - 11, collar_z + 11]],
+                                 hoops ? [for (z = hoop_all) [z - hoop_h/2 - 1, z + hoop_h/2 + 1]] : []));
 
 module shell_piece(i) {
     bot = i == 0; top = i == n_pieces - 1;
-    z0 = pz0(i); z1 = pz1(i);
+    z0 = pz0(i); z1 = top ? z_w0 : pz1(i);
     difference() {
         union() {
             tube(Ri, R, z0, z1);
-            if (!top) {   // joint sleeve + 45 deg underside
-                tube(R + sleeve_fit, R + sleeve_fit + sleeve_t, z1 - 0.01, z1 + sleeve_h);
-                translate([0,0,z1 - (sleeve_fit + sleeve_t)]) difference() {
-                    cylinder(r1 = R - 0.01, r2 = R + sleeve_fit + sleeve_t, h = sleeve_fit + sleeve_t);
-                    translate([0,0,-1]) cylinder(r = Ri, h = 10);
-                }
-            }
-            if (!bot) translate([-2, R - 0.5, z0 + 0.5]) cube([4, 0.5 + sleeve_fit + 1.2, sleeve_h - 1.5]);   // key
-            if (top) { pod_bosses(); spout_pad(); }
+            if (!top) flange(z1, 1, Ri, R);
+            if (!bot) flange(z0, -1, Ri, R);
+            if (hoops) for (z = hoop_all) if (z > z0 + fh + 2 && z < z1 - (top ? 1 : fh + 2)) hoop(z);
+            if (top) { backbone(); pod_bosses(); }
         }
-        if (!bot) translate([0,0,z0 - 1]) cylinder(r = Ri, h = z1 - z0 + 2);
-        if (!top) translate([-2.3, R - 1, z1 + 1]) cube([4.6, sleeve_t + 3, sleeve_h]);     // key slot (+Y)
+        if (!bot) key_notch(z0, 90, Ri, R, 1);
+        if (!top) key_notch(z1, 90, Ri, R, -1);
+        translate([0,0,z0 - 1]) cylinder(r = Ri, h = shell_len);
         if (bot) window_cut();
-        if (top) { ball_port_cut(); dowel_slot_cut(R + pad_t + 1); pad_pilots(); }
-        if (top && bar_slots) for (sx = [-1,1])
-            translate([sx > 0 ? Ri - 3 : -R - 3, -bar_slot_w/2, z_a1 + bar_slot_z]) cube([R - Ri + 6, bar_slot_w, rim_z + 5]);
-        if (lite) lite_cuts(lite_spans(i), skip_window = bot, skip_pad = top);
+        if (lite) lite_cuts(lite_spans(i), skip_window = bot);
     }
 }
 
@@ -428,6 +408,18 @@ module tray_body() {
         }
         below_ramp();                                                              // only the wedge edge meets the ramp
         if (pin_mode == "steel") translate([0,0,1]) cylinder(d = steel_pin_d, h = floor_t + shoulder_h, $fn = 48);
+        // v8: tray floor lightening outside the tube (4 mm hexes, same anti-snag size), clear of the
+        // wedge edge, the wing walls, the puzzle tabs and the sump lip
+        translate([0,0,floor_t - tray_t - 1]) linear_extrude(tray_t + 2) intersection() {
+            offset(delta = -(wing_t + 5)) chan2d();
+            difference() {
+                translate([-400, 0]) square([800, y_e - 14]);
+                circle(r = Rs + 4);
+                for (sx = [-1,1]) translate([sx*split_x - 14, -50]) square([28, 400]);
+            }
+            for (a = [-40:40], b = [0:40]) translate([a*(hex_af + hex_rib) + (b%2)*(hex_af + hex_rib)/2, b*(hex_af + hex_rib)*sin(60)])
+                rotate(30) circle(d = hex_hc, $fn = 6);
+        }
         // floor lightening inside the tube
         translate([0,0,-1]) linear_extrude(floor_t + 2) intersection() {
             difference() { circle(r = Ri - 4); circle(r = 14); }
@@ -454,41 +446,6 @@ module wing_part(s) {   // s = 1 right, -1 left
     }
 }
 
-// ------------------------------ spouts --------------------------------
-module spout(ball = true) {
-    pw   = ball ? ball_w : dow_w;
-    w    = pw + 4;
-    zf   = ball ? bp_z0 - 0.5 : dow_low - 0.5;
-    ztop = ball ? pad_z1 - 0.5 : dfl_top;
-    wh   = ball ? 26 : 20;
-    rin  = R + pad_t + 0.2;
-    P0   = [0, -R, zf];
-    hz   = ball ? [0, 1] : [2, 3];
-    difference() {
-        intersection() {
-            union() {
-                intersection() {
-                    tube(rin, rin + flange_t, zf - 60, ztop);
-                    translate([-pad_hw, -200, zf - 61]) cube([2*pad_hw, 200 - 20, ztop - zf + 62]);
-                }
-                translate(P0) rotate([spout_tilt,0,0]) {
-                    translate([-w/2 - spout_wall, -spout_len, -spout_floor]) cube([w + 2*spout_wall, spout_len + 40, spout_floor]);
-                    for (s = [-1,1]) translate([s > 0 ? w/2 : -w/2 - spout_wall, -spout_len, -0.01])
-                        cube([spout_wall, spout_len + 40, wh]);
-                }
-            }
-            translate(P0) rotate([spout_tilt,0,0]) translate([-500,-500,-spout_floor]) cube(1000);
-        }
-        translate([0,0,zf - 100]) cylinder(r = rin, h = 300);
-        if (ball) ball_port_cut(); else dowel_slot_cut(rin + flange_t + 1);
-        for (i = hz) let(h = pad_holes()[i])
-            translate([h[0], -sqrt(pow(rin, 2) - h[0]*h[0]) + 1, h[1]]) rotate([90,0,0]) cylinder(d = 3.4, h = 20, $fn = 24);
-    }
-}
-module spout_print(ball = true) {
-    zf  = ball ? bp_z0 - 0.5 : dow_low - 0.5;
-    translate([0,0,spout_floor]) rotate([-spout_tilt,0,0]) translate([0, R, -zf]) spout(ball);
-}
 
 // ------------------------------ pod -----------------------------------
 drv_zc = plate_l - drv_from_top;
@@ -538,14 +495,15 @@ module ramp_world() {
             translate([s > 0 ? ramp_in_w/2 : -ramp_out_w/2, ramp_zone, 0]) cube([(ramp_out_w - ramp_in_w)/2, ramp_len - ramp_zone, ramp_wall_h]);
     }
 }
+
+// ------------------------------ assembly ------------------------------
+module clamp_at(z) translate([0,0,z]) { color("Orange") clamp_half(true); color("Gold") rotate(180) clamp_half(false); }
 module tube_parts(lower_only = false) {
-    for (i = [0:(lower_only ? 0 : n_pieces-1)]) color(i % 2 ? "LightSteelBlue" : "SteelBlue", 0.6) shell_piece(i);
+    for (i = [0:(lower_only ? 0 : n_pieces-1)]) color(i % 2 ? "LightSteelBlue" : "SteelBlue", 0.75) shell_piece(i);
+    if (!lower_only) for (z = splits) clamp_at(z);
     color("Orange") sump();
     color("Gold") { wing_part(1); wing_part(-1); }
-    if (!lower_only) {
-        color("Orange") { spout(true); spout(false); elec_pod(); }
-        dummy_electronics();
-    }
+    if (!lower_only) { color("Orange") elec_pod(); dummy_electronics(); }
 }
 module shell_assembly() {
     place_tube() tube_parts();
@@ -553,16 +511,17 @@ module shell_assembly() {
     color("LightGray", 0.4) translate([-241, -483, -1]) cube([482, 483, 1]);   // 19 x 19 in footprint (east edge on the ramp)
 }
 
-if (part == "assembly")    shell_assembly();
-if (part == "shell_lower") translate([0,0,pz1(0) + sleeve_h]) rotate([180,0,0]) shell_piece(0);   // UPSIDE DOWN: sleeve on the bed
+if (part == "assembly")     shell_assembly();
+if (part == "shell_lower")  translate([0,0,pz1(0)]) rotate([180,0,0]) shell_piece(0);   // UPSIDE DOWN: flange face on the bed
 if (part == "shell_middle") translate([0,0,-pz0(1)]) shell_piece(1);
 if (part == "shell_upper")  translate([0,0,-pz0(n_pieces-1)]) shell_piece(n_pieces - 1);
-if (part == "sump")        sump();                                        // floor down
-if (part == "wing_right")  wing_part(1);
-if (part == "wing_left")   wing_part(-1);
-if (part == "spout_ball")  spout_print(true);
-if (part == "spout_dowel") spout_print(false);
-if (part == "pod")         rotate([90,0,0]) pod_plate();
+if (part == "sump")         sump();                                        // floor down
+if (part == "wing_right")   wing_part(1);
+if (part == "wing_left")    wing_part(-1);
+if (part == "pod")          rotate([90,0,0]) pod_plate();
+if (part == "clamp_a")      translate([0,0,fh]) clamp_half(true);          // x2 (one per joint)
+if (part == "clamp_b")      translate([0,0,fh]) clamp_half(false);         // x2
+if (part == "key")          key_part();                                    // x2, loose clocking key
 
 // values for other files that `use` this one
-function shell_info() = [z_a0, z_a1, shell_len, R, lean, n_pieces, T_y, T_z];
+function shell_info() = [z_a0, z_a1, shell_len, R, lean, n_pieces, T_y, T_z, z_w0, bb_a0, bb_a1, arm_a, arm_z, arm_screw_dz, z_seat, Ri];

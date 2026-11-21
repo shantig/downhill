@@ -20,9 +20,9 @@ part = "assembly"; // [assembly, collar_front, collar_back, foot_left, foot_righ
 // NOTE: the electronics pod now lives in downhill_shell.scad (upper face, near the motor).
 show_old_pod = false;
 
-/* [Shell — from downhill_shell.scad v7] */
+/* [Shell — from downhill_shell.scad v8] */
 shell_od  = 116.4; // shell OD (114 bore + 2 x 1.2 wall)
-shell_len = 650.2; // shell length along its axis (sump underside -> rim)
+shell_len = 676.2; // shell length along its axis (sump underside -> backbone top), shell v8
 lean      = 9;     // degrees from vertical, leaning back (v7: tower at the foot of the ramp; was 25)
 
 /* [Legs] */
