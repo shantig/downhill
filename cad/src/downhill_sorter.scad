@@ -44,7 +44,7 @@
 use <downhill_shell.scad>
 use <downhill_joint.scad>
 
-part = "assembly"; // [assembly, collector_a, collector_b, splitter, chute_ball, chute_dowel, sleeve, layout]
+part = "assembly"; // [assembly, collector_a, collector_b, splitter, gate_test, chute_ball, chute_dowel, sleeve, layout]
 
 /* [Targets (inches, as on the score sheet)] */
 D_ball   = 24;        // ping-pong box distance (4..24)
@@ -77,6 +77,8 @@ land_drop = 6;        // landing floor below the collector outlet lip
 s_land    = 10;       // splitter channel slope (deg)
 s_cross   = 6;        // dowel channel cross-slope DOWN toward the east wall: keeps dowels away from the ball door
 door_sill = 3;        // ball door lip above the (west) floor
+s_ball    = 4;        // ball channel slope back north (deg)
+tabs      = true;     // collector mounting tabs
 drop_b    = 14;       // ball channel floor below the dowel floor at the door
 wall_h    = 18;       // channel walls above the floor
 back_h    = 36;       // back (west) wall at the landing
@@ -116,9 +118,12 @@ P_out = tw([0, -col_ro, zf(-col_ro)]);                  // outlet lip (world)
 y_e  = P_out[1] - col_wall - 1.8;                       // channel east face: just outside the collector wall
 z_l  = P_out[2] - land_drop;                            // landing floor at x = 0
 x_n  = -outlet_w/2 - 8;                                 // north end wall
-x_f0 = outlet_w/2 + 6;                                  // fence starts at the east wall here
+x_f0 = outlet_w/2 + 37;                                 // fence starts at the east wall here (door must clear the landing)
 x_f1 = x_f0 + cw;                                       // ... and meets the west wall here
 x_sp1 = x_f1 + 20;                                      // splitter ends (dowel exit)
+// ball door: a ball rolling along the 45 deg fence meets the west wall with its centre r/tan(22.5) - r*sqrt2
+// = 48 mm upstream of the fence corner, so the door is centred there (70 wide); the fence end lands on wall
+x_dr1 = x_f1 - 5;  x_dr0 = x_dr1 - 70;
 function zd(x) = z_l - (x - x_n)*tan(s_land);           // dowel floor in the splitter, at the EAST wall
 function zw(x) = zd(x) + cw*tan(s_cross);               // ... at the WEST wall (door side)
 yb_e = y_e - cw - sp_wall;                              // ball channel east face
@@ -131,7 +136,7 @@ function near_rim_x(D) = fp + D*25.4 - 25.4;
 // chute runs (start -> tip, world). Chutes angle slightly in plan to hit the box centre line.
 D0 = [x_sp1, y_e - cw/2, zd(x_sp1) + cw/2*tan(s_cross)];
 D1 = [near_rim_x(D_dowel) + tip_in, box_cy, level_z + tip_clear];
-B0 = [x_bn, yb_e - cw/2, z_b0 - (x_f1 + 8 - x_bn)*tan(4)];
+B0 = [x_bn, yb_e - cw/2, z_b0 - (x_f1 + 8 - x_bn)*tan(s_ball)];
 B1 = [-(near_rim_x(D_ball) + tip_in), box_cy, level_z + tip_clear];
 function plan(a, b) = norm([b[0] - a[0], b[1] - a[1]]);
 d_slope = atan((D0[2] - D1[2])/plan(D0, D1));
@@ -144,11 +149,12 @@ echo(str("COLLECTOR: floor ", col_beta, " deg (tube) / ~", col_beta + lean, " de
 echo(str("SPLITTER: landing z ", z_l, ", fence lower edge ", gate_h, " mm above the floor, ball door floor z ", z_b0));
 echo(str("DOWEL chute -> south box at D = ", D_dowel, " in: ", d_len, " mm long at ", d_slope, " deg, tip z ", D1[2], " (", d_n, " segments)"));
 echo(str("BALL  chute -> north box at D = ", D_ball, " in: ", b_len, " mm long at ", b_slope, " deg, tip z ", B1[2], " (", b_n, " segments)"));
-assert(d_slope >= 7.5, "dowel chute too flat (dowels need ~8 deg+): lower D_dowel");
+if (part != "gate_test") assert(d_slope >= 7.5, "dowel chute too flat (dowels need ~8 deg+): lower D_dowel");
 assert(b_slope >= 3, "ball chute too flat: lower D_ball");
 assert(D_ball >= 4 && D_ball <= 24 && D_dowel >= 4 && D_dowel <= 24, "distances must be 4..24 in");
+assert(x_dr0 > outlet_w/2 + 8, "ball door runs into the landing");
 assert(gate_h > 8 + 3 && gate_h < 40 - 12, "gate must pass a dowel and stop a ball");
-assert(tan(s_land) > tan(s_cross) + 0.04, "fence won't lead balls west against the cross-slope");
+if (part != "gate_test") assert(tan(s_land) > tan(s_cross) + 0.04, "fence won't lead balls west against the cross-slope");
 echo(str("Chute tips over the boxes: dowel x ", D1[0], " (near rim ", near_rim_x(D_dowel), "), ball x ", B1[0], " (near rim ", -near_rim_x(D_ball), ")"));
 
 // ------------------------------ helpers -------------------------------
@@ -266,7 +272,7 @@ module splitter() {
             channel(x_n, x_sp1, y_e, cw, z_l, s_land, 1, wall_h, [false, true], cross = s_cross);
             channel(x_f0 - 2, x_sp1, y_e, cw, zd(x_f0 - 2), s_land, 1, wall_h, [true, false], cross = s_cross);
             // tall back wall at the landing (objects arrive moving -y)
-            translate([x_n, y_e - cw - sp_wall, zd(x_f0) - sp_floor]) cube([x_f0 - x_n, sp_wall, back_h + (x_f0 - x_n)*tan(s_land)]);
+            translate([x_n, y_e - cw - sp_wall, zd(x_dr0) - sp_floor]) cube([x_dr0 - x_n, sp_wall, back_h + (x_dr0 - x_n)*tan(s_land)]);
             // north end wall
             translate([x_n - sp_wall, y_e - cw - sp_wall, zd(x_n) - sp_floor]) cube([sp_wall, cw + 2*sp_wall, back_h]);
             // fence: 45 deg across the channel, lower edge gate_h above the floor
@@ -275,13 +281,13 @@ module splitter() {
                 translate([x_n, y_e - cw, 0]) cube([x_sp1 - x_n, cw, zd(x_f0) + wall_h + 20]);
             }
             // ball channel: from the door, back north to the splitter's north end
-            channel(x_bn, x_f1 + 8, yb_e, cw, z_b0 - (x_f1 + 8 - x_bn)*tan(4) + (x_f1 + 8 - x_bn)*tan(4), 4, -1, wall_h + drop_b, [false, true]);
-            translate([x_f1 + 8, yb_e - cw - sp_wall, z_b0 - sp_floor - 2]) cube([sp_wall, cw + sp_wall + 0.01, wall_h + drop_b + 6]);   // end stop
+            channel(x_bn, x_f1 + 8, yb_e, cw, z_b0, s_ball, -1, wall_h + drop_b, [false, true]);
+            translate([x_f1 + 8, yb_e - cw - sp_wall, z_b0 - sp_floor]) cube([sp_wall, cw + sp_wall + 0.01, wall_h + drop_b + 4]);   // end stop
             // mounting tabs to the collector bosses (y = P_out[1] - 1.2 face)
-            for (s = [-1,1]) translate([s*(outlet_w/2 + 10) - 6, P_out[1] - 1.2 - 3, P_out[2] - 22]) cube([12, 3, 22]);
+            if (tabs) for (s = [-1,1]) translate([s*(outlet_w/2 + 10) - 6, P_out[1] - 1.2 - 3, P_out[2] - 22]) cube([12, 3, 22]);
         }
         // ball door in the west wall at the fence end
-        translate([x_f1 - 46, y_e - cw - sp_wall - 1, zw(x_f1) + door_sill]) cube([50, sp_wall + 2, 60]);
+        hull() for (x = [x_dr0, x_dr1 - 0.01]) translate([x, y_e - cw - sp_wall - 1, zw(x) + door_sill]) cube([0.01, sp_wall + 2, 60]);
         // tab bolts
         for (s = [-1,1], dz = [-8, -16]) translate([s*(outlet_w/2 + 10), P_out[1] + 1, P_out[2] + dz]) rotate([90,0,0]) cylinder(d = m3_clear, h = 10, $fn = 24);
     }
@@ -347,6 +353,19 @@ if (part == "layout")      { sorter_assembly(); use_shell_preview(); }
 if (part == "collector_a") collector_half("a");
 if (part == "collector_b") collector_half("b");
 if (part == "splitter")    splitter();
+// GATE TEST: the splitter's fence / door / ball-channel region with every slope set to 0 and a
+// solid plinth under the dowel channel, so it prints flat with no supports. Prop it at 10 deg
+// (toward the dowel exit) and 6 deg (down toward the east wall) to test. Export with:
+//   -D part="gate_test" -D s_land=0 -D s_cross=0 -D s_ball=0 -D tabs=false
+module gate_test() {
+    xa = x_dr0 - 15;
+    zb = z_b0 - sp_floor;                                   // ball floor underside = the bed
+    translate([-xa, 0, -zb]) {
+        intersection() { splitter(); translate([xa, -1000, -1000]) cube([x_sp1 - xa + 1, 2000, 3000]); }
+        translate([xa, y_e - cw - sp_wall, zb]) cube([x_sp1 - xa, cw + 2*sp_wall, zd(0) - sp_floor - zb + 0.01]);
+    }
+}
+if (part == "gate_test")   gate_test();
 if (part == "chute_ball")  u_seg(b_len/b_n - 1);
 if (part == "chute_dowel") u_seg(d_len/d_n - 1);
 if (part == "sleeve")      sleeve();
