@@ -1,3 +1,15 @@
+# Downhill — v8.1 (2026-11-21): exit opens north into the team's rail box
+
+- **Shell v8.1:** the open exit arc is re-aimed **north (125–255°)** so objects drop straight into the team's cardboard rail sorter. The backbone now covers 255–485°, so the motor arm (20°) and the pod (+Y) still sit on it. The collector seat hoop moved down (`seat_drop` 60) so the new clamp band clears the pod bosses. **Reprint `shell_upper` from this version.**
+- **`downhill_box_mount.scad` (new):** 2-half clamp band on the seat hoop, a back plate against the box's short end, **2 hooks** over the 6 mm cardboard end wall, a **sloped lip** that closes the curved gap between the round shell and the flat box end, and **side wings**. It holds the box level side-to-side (cancelling the 9° lean) and pitched **8° down toward the north** container.
+  - `box_mount_north`: ~47 g PLA. Print upright as exported **with tree supports**. M3×6×5 inserts in its 2 ears.
+  - `box_mount_south`: ~10 g. Flat, no supports. 2× M3×12.
+- **Box length sets the ball distance** (far end 30 mm past the near rim): 286 mm → D = 4" (the rule minimum), 337 mm → 6", 389 mm → 8", 491 mm → 12". The current 260 mm box only reaches ~3.4", which is under the 4" minimum.
+- Tie a fishing line from the top of the motor arm to the box's far end. The box is a cantilever.
+- The printed collector/splitter concept (`downhill_sorter.scad`) is superseded on the tower. The `gate_test` part and the chute layout math still stand on their own.
+
+---
+
 # Downhill — v8 (testing feedback 2026-11-20)
 
 **Current versions:** shell v8 · joint v8 (V-clamp) · motor arm v1 (`downhill_crown.scad`) · coupler v5 · sorter concept v1 · auger v5 (unchanged) · frame (rod length updated).

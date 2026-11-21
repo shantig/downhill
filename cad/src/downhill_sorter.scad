@@ -1,5 +1,8 @@
 // =====================================================================
 // Downhill Dispatcher — SORTER concept v1 (Task 2): collector + height gate + chutes
+// NOTE (v8.1): superseded on the tower by downhill_box_mount.scad + the team's rail box. The
+// collector no longer matches the shell (window now faces north, seat hoop moved). The splitter
+// / gate_test geometry and the chute layout math are still valid on their own.
 // ---------------------------------------------------------------------
 // Exploration for the team (they're designing their own hopper too).
 // Passive, gravity only, no electronics:

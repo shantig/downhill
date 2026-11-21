@@ -8,6 +8,8 @@
 //     215 deg is open. Objects ride the flight into the open arc and roll off
 //     the 40 deg umbrella flight sideways, mostly right at the backbone's
 //     leading edge (bb_a0), into the sorter's collector (downhill_sorter.scad).
+// v8.1: the open arc now faces NORTH (125..255 deg) so objects drop straight into the team's
+//     rail box, hung on downhill_box_mount.scad. Objects leave heading north / north-west.
 //     With the auger turning CW seen from above (the lifting direction for this
 //     right-hand flight), the stream leaves heading west / north-west.
 //   * The motor ARM (downhill_crown.scad) bolts to a pad on the backbone with
@@ -49,8 +51,8 @@ n_pieces  = 3;
 
 /* [Top exit (v8)] */
 exit_h    = 64;       // open height below the auger top (>= one pitch, see header)
-bb_a0     = -20;      // backbone: leading edge (objects leave here, CW travel)
-bb_a1     = 125;      // backbone: trailing edge (covers the pod at +Y)
+bb_a0     = 255;      // backbone: leading edge (objects leave here, CW travel). v8.1: open side faces NORTH (-X) into the sorter box
+bb_a1     = 485;      // backbone: trailing edge (= 125, covers the pod at +Y). Open arc 125..255
 bb_t      = 2.0;      // backbone wall (thicker than the tube)
 bb_rib    = 3.0;      // vertical edge ribs: radial depth
 bb_rib_w  = 4.0;
@@ -61,7 +63,7 @@ arm_pad_w = 20;       // pad width (tangential)
 arm_pad_t = 4.0;      // pad wall (radial)
 arm_screw_dz = [7, 22]; // M3 screws above the arm underside
 m3_clear  = 3.4;
-seat_drop = 45;       // collector clamp band sits on this hoop (its top), below the window bottom
+seat_drop = 60;       // collector clamp band sits on this hoop (its top), below the window bottom
 
 /* [Hoops (v8)] */
 hoops     = true;
