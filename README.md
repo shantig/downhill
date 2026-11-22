@@ -1,5 +1,7 @@
 # Downhill Dispatcher
 
+> CAD for the device (current version, archive and version tags) lives in [`cad/`](cad/README.md).
+
 Firmware for safely controlling one Waveshare `DCGM-N20-12V-EN-200RPM` motor
 on Motor A of the Waveshare General Driver for Robots.
 

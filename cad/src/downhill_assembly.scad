@@ -6,11 +6,9 @@ use <downhill_frame.scad>
 use <downhill_crown.scad>
 use <downhill_coupler_v5.scad>
 use <downhill_box_mount.scad>
-use <downhill_sorter.scad>   // v1 collector/splitter concept (superseded by the box mount; layout still useful)
 use <auger.scad>
 
 show_auger  = true;
-show_sorter = false;   // v1 printed collector/splitter concept (doesn't match the v8.1 north-facing window)
 show_box    = true;
 si   = shell_info();   // [z_a0, z_a1, shell_len, R, lean, n_pieces, T_y, T_z, z_w0, bb_a0, bb_a1, arm_a, arm_z, ...]
 z_a0 = si[0]; z_a1 = si[1]; L = si[2]; T_y = si[6]; T_z = si[7]; arm_a = si[11];
@@ -30,7 +28,6 @@ translate([0, T_y, T_z]) {
     world_from_tube(0.55*L) { color("Orange") collar_half(true); color("Gold") collar_half(false); }
     for (s = [-1,1]) { color("BurlyWood") seg(SbW(s), Fb(s), 6.35/2); color("Orange") translate(G(s)) foot(s); }
 }
-if (show_sorter) sorter_assembly();
 if (show_box) to_world() { color("Orange") mount_north(); color("Gold") mount_south(); box_ghost(); }
 ramp_world();
 color("LightGray", 0.5) translate([-241, -483, -1]) cube([482, 483, 1]);   // 19 x 19 in footprint, east edge at the ramp
