@@ -1,16 +1,16 @@
 # Downhill CAD — current version: v8.1 (2026-11-21)
 
-`cad/src` and `cad/stl` always hold the **current** version only. Superseded files live in [`cad/archive/`](archive/), and every version is tagged in git (`cad-v1` … `cad-v8.1`), so `git checkout cad-v7` gets you the whole tree as it was.
+`cad/src` and `cad/stl` always hold the **current** version only. Superseded files live in [`cad/archive/`](archive/). To see the whole tree exactly as it was at a version, check out its commit (e.g. `git checkout 9b4fd3b` for v7).
 
-| Version | Date | Tag | What it was |
+| Version | Date | Commit | What it was |
 |---|---|---|---|
-| **v8.1** | 2026-11-21 | `cad-v8.1` | **Current.** Exit opens north into the team's cardboard rail box; box mount (zip ties); wire holes |
-| v8 | 2026-11-20 | `cad-v8` | Open top exit, V-clamp joints, motor arm, coupler v5, printed sorter concept ([archive/v8](archive/v8/)) |
-| v7 | 2026-11-20 | `cad-v7` | Tower at the foot of the ramp, intake tray, hex lightening (v5/v6 folded in) ([archive/v7](archive/v7/)) |
-| v4 | 2026-11-19 | `cad-v4` | Stiff slots on all pieces, drop-in motor bar, zip-tie collet coupler ([archive/v1-v4](archive/v1-v4/)) |
-| v3 | 2026-11-19 | `cad-v3` | Stiffer lightening slots |
-| v2 | 2026-11-13 | `cad-v2` | Level 3 build, lighter, slicer-clean auger |
-| v1 | 2026-11-13 | `cad-v1` | Auger shell, lean-back frame, N20 top drive |
+| **v8.1** | 2026-11-21 | `2017c7e` | **Current.** Exit opens north into the team's cardboard rail box; box mount (zip ties); wire holes |
+| v8 | 2026-11-20 | `75b3934` | Open top exit, V-clamp joints, motor arm, coupler v5, printed sorter concept ([archive/v8](archive/v8/)) |
+| v7 | 2026-11-20 | `9b4fd3b` | Tower at the foot of the ramp, intake tray, hex lightening (v5/v6 folded in) ([archive/v7](archive/v7/)) |
+| v4 | 2026-11-19 | `1de7bc3` | Stiff slots on all pieces, drop-in motor bar, zip-tie collet coupler ([archive/v1-v4](archive/v1-v4/)) |
+| v3 | 2026-11-19 | `d6b23cf` | Stiffer lightening slots |
+| v2 | 2026-11-13 | `b9c1253` | Level 3 build, lighter, slicer-clean auger |
+| v1 | 2026-11-13 | `4a8ca8b` | Auger shell, lean-back frame, N20 top drive |
 
 ## Current parts (v8.1)
 

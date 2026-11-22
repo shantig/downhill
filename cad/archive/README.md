@@ -1,7 +1,7 @@
 # CAD archive
 
 Superseded files, grouped by the version they belong to. The current version is always in `cad/src` and `cad/stl`.
-These files are kept for reference. Some `use <...>` other files that have since changed, so to rebuild an old version exactly, check out its tag instead (`git checkout cad-v7`, etc.).
+These files are kept for reference. Some `use <...>` other files that have since changed, so to rebuild an old version exactly, check out its commit instead (hashes in the version table in `cad/README.md`).
 
 | Folder | Contents | Superseded by |
 |---|---|---|
